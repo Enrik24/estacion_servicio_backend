@@ -3,11 +3,11 @@ from .models import Bitacora
 
 @admin.register(Bitacora)
 class BitacoraAdmin(admin.ModelAdmin):
-    list_display = ['id', 'accion', 'estado', 'usuario_email', 'ip_address', 'fecha_hora']
-    list_filter = ['accion', 'estado', 'fecha_hora']
-    search_fields = ['usuario_email', 'usuario_nombre', 'ip_address']
+    list_display = ['id', 'accion', 'usuario_nombre', 'modulo_afectado', 'dispositivo', 'direccion_ip', 'creado_en']
+    list_filter = ['accion', 'dispositivo', 'creado_en']
+    search_fields = ['usuario_nombre', 'descripcion', 'direccion_ip']
     readonly_fields = [f.name for f in Bitacora._meta.fields]
-    ordering = ['-fecha_hora']
+    ordering = ['-creado_en']
     
     def has_add_permission(self, request): return False
     def has_change_permission(self, request, obj=None): return False

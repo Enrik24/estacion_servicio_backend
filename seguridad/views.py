@@ -11,9 +11,9 @@ class BitacoraViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'bitacora.ver'
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['usuario', 'accion', 'estado']
-    ordering_fields = ['fecha_hora']
-    ordering = ['-fecha_hora']
+    filterset_fields = ['usuario', 'accion', 'dispositivo']
+    ordering_fields = ['creado_en']
+    ordering = ['-creado_en']
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -21,7 +21,7 @@ class BitacoraViewSet(viewsets.ReadOnlyModelViewSet):
         fecha_hasta = self.request.query_params.get('fecha_hasta')
         
         if fecha_desde:
-            queryset = queryset.filter(fecha_hora__date__gte=fecha_desde)
+            queryset = queryset.filter(creado_en__date__gte=fecha_desde)
         if fecha_hasta:
-            queryset = queryset.filter(fecha_hora__date__lte=fecha_hasta)
+            queryset = queryset.filter(creado_en__date__lte=fecha_hasta)
         return queryset

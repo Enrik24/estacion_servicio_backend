@@ -51,6 +51,12 @@ class Command(BaseCommand):
             
             # Permisos de reportes
             {'codigo': 'reportes.ver', 'nombre': 'Ver Reportes', 'descripcion': 'Permiso para ver reportes de la gasolinera'},
+            
+            # Permisos de bitácora
+            {'codigo': 'bitacora.ver', 'nombre': 'Ver Bitácora', 'descripcion': 'Permiso para ver la bitácora del sistema'},
+            
+            # Permiso de admin (NUEVO - middleware de seguridad)
+            {'codigo': 'admin.acceso', 'nombre': 'Acceso al Panel Admin', 'descripcion': 'Permiso para acceder al panel de administración de Django'},
         ]
         
         permisos_creados = {}
@@ -93,6 +99,7 @@ class Command(BaseCommand):
                     permisos_creados.get('ventas.crear'),
                     permisos_creados.get('ventas.editar'),
                     permisos_creados.get('ver.facturas'),
+                    # ⚠️ Empleado NO tiene acceso a admin ni bitácora
                 ]
             },
         ]

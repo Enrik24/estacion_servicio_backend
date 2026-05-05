@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db import transaction
 import uuid
 
-from .models import Surtidor, Turno, Cliente, Venta
+from .models import Surtidor, Turno, Cliente, Venta, Usuario
 from .serializers import (
     SurtidorSerializer, TurnoSerializer, 
     ClienteSerializer, VentaSerializer, RegistrarVentaSerializer
@@ -58,8 +58,11 @@ class TurnoViewSet(viewsets.ModelViewSet):
             usuario=self.request.user,
             usuario_email=self.request.user.email,
             usuario_nombre=self.request.user.nombre,
+            usuario_rol=self.request.user.nombre_rol,
             accion='CREAR',
             estado='EXITO',
+            modulo_afectado='Venta y POS',
+            descripcion='Apertura de turno',
             ip_address=getattr(self.request, 'ip_address', None),
             user_agent=getattr(self.request, 'user_agent', '')[:500]
         )
@@ -89,8 +92,11 @@ class TurnoViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             usuario_email=request.user.email,
             usuario_nombre=request.user.nombre,
+            usuario_rol=request.user.nombre_rol,
             accion='EDITAR',
             estado='EXITO',
+            modulo_afectado='Venta y POS',
+            descripcion='Cierre de turno',
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )
@@ -200,8 +206,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             usuario_email=request.user.email,
             usuario_nombre=request.user.nombre,
+            usuario_rol=request.user.nombre_rol,
             accion='CREAR',
             estado='EXITO',
+            modulo_afectado='Venta y POS',
+            descripcion='Registro de venta',
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )
@@ -230,8 +239,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             usuario_email=request.user.email,
             usuario_nombre=request.user.nombre,
+            usuario_rol=request.user.nombre_rol,
             accion='ELIMINAR',
             estado='EXITO',
+            modulo_afectado='Venta y POS',
+            descripcion='Anulación de venta',
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )

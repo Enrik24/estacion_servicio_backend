@@ -157,7 +157,7 @@ def login_view(request):
                 modulo_afectado='Administración y Seguridad',
                 descripcion='Intento de inicio de sesión fallido',
                 ip_address=getattr(request, 'ip_address', None),
-                user_agent=getattr(request, 'user_agent', '')[:500] 
+                user_agent=getattr(request, 'user_agent', '')[:500]
             )
             return Response({'error': 'Usuario inactivo'}, status=status.HTTP_403_FORBIDDEN)
         

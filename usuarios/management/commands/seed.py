@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from usuarios.models import Permiso, Rol, Usuario
+from ventas.models import Isla, Lado, TipoCombustible
 
 
 class Command(BaseCommand):
@@ -199,3 +200,48 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('Credenciales:'))
         self.stdout.write('  Admin:    admin@estacion.com / admin123')
         self.stdout.write('  Operador: operador@estacion.com / operador123')
+
+        islas_data = [
+            {'numero': 1, 'descripcion': 'Isla 1'},
+            {'numero': 2, 'descripcion': 'Isla 2'},
+         ]
+
+        for isla_data in islas_data:
+            isla, created = Isla.objects.get_or_create(
+                numero=isla_data['numero'],
+                defaults={'descripcion': isla_data['descripcion'], 'estado': 'ACTIVO'}
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Isla creada: Isla {isla.numero}'))
+            else:
+                self.stdout.write(f'  Isla ya existe: Isla {isla.numero}')
+
+            # Crear lados A y B para cada isla
+            for lado in ['A', 'B']:
+                l, created = Lado.objects.get_or_create(
+                    isla=isla,
+                    lado=lado,
+                    defaults={'activo': True}
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f'    Lado creado: Isla {isla.numero} - Lado {lado}'))
+                else:
+                    self.stdout.write(f'    Lado ya existe: Isla {isla.numero} - Lado {lado}')
+
+        # Crear tipos de combustible
+        tipos_data = [
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 3.74},
+            {'tipo': 'GASOLINA_PREMIUM', 'precio_litro': 4.79},
+            {'tipo': 'DIESEL', 'precio_litro': 3.72},
+            {'tipo': 'GNV', 'precio_litro': 1.66},
+        ]
+
+        for tipo_data in tipos_data:
+            tipo, created = TipoCombustible.objects.get_or_create(
+                tipo=tipo_data['tipo'],
+                defaults={'precio_litro': tipo_data['precio_litro'], 'activo': True}
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {tipo.get_tipo_display()}'))
+            else:
+                self.stdout.write(f'  Combustible ya existe: {tipo.get_tipo_display()}')

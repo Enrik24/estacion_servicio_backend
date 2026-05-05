@@ -1,12 +1,31 @@
 from django.db import models
 from usuarios.models import Usuario
 
-class Surtidor(models.Model):
-    TIPOS_COMBUSTIBLE = [
-        ('GASOLINA', 'Gasolina'),
-        ('DIESEL', 'Diésel'),
+
+class TipoCombustible(models.Model):
+    TIPOS = [
+        ('GASOLINA_ESPECIAL', 'Gasolina Especial'),
+        ('GASOLINA_PREMIUM', 'Gasolina Premium'),
+        ('DIESEL', 'Diésel Oil'),
         ('GNV', 'Gas Natural Vehicular'),
     ]
+
+    id = models.BigAutoField(primary_key=True)
+    tipo = models.CharField(max_length=30, choices=TIPOS, unique=True)
+    precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
+    activo = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tipos_combustible'
+        verbose_name = 'Tipo de Combustible'
+        verbose_name_plural = 'Tipos de Combustible'
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - Bs. {self.precio_litro}/Lt"
+
+
+class Isla(models.Model):
     ESTADOS = [
         ('ACTIVO', 'Activo'),
         ('INACTIVO', 'Inactivo'),
@@ -15,19 +34,41 @@ class Surtidor(models.Model):
 
     id = models.BigAutoField(primary_key=True)
     numero = models.IntegerField(unique=True)
-    tipo_combustible = models.CharField(max_length=20, choices=TIPOS_COMBUSTIBLE)
-    precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVO')
+    descripcion = models.CharField(max_length=150, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'surtidores'
-        verbose_name = 'Surtidor'
-        verbose_name_plural = 'Surtidores'
+        db_table = 'islas'
+        verbose_name = 'Isla'
+        verbose_name_plural = 'Islas'
+        ordering = ['numero']
 
     def __str__(self):
-        return f"Surtidor {self.numero} - {self.tipo_combustible}"
+        return f"Isla {self.numero}"
+
+
+class Lado(models.Model):
+    LADOS = [
+        ('A', 'Lado A'),
+        ('B', 'Lado B'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    isla = models.ForeignKey(Isla, on_delete=models.CASCADE, related_name='lados')
+    lado = models.CharField(max_length=1, choices=LADOS)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'lados'
+        verbose_name = 'Lado'
+        verbose_name_plural = 'Lados'
+        unique_together = ['isla', 'lado']
+        ordering = ['isla', 'lado']
+
+    def __str__(self):
+        return f"Isla {self.isla.numero} - Lado {self.lado}"
 
 
 class Turno(models.Model):
@@ -36,8 +77,16 @@ class Turno(models.Model):
         ('CERRADO', 'Cerrado'),
     ]
 
+    HORARIOS = [
+        ('MANANA', 'Mañana 06:00 - 14:00'),
+        ('TARDE', 'Tarde 14:00 - 22:00'),
+        ('NOCHE', 'Noche 22:00 - 06:00'),
+    ]
+
     id = models.BigAutoField(primary_key=True)
     operador = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='turnos')
+    isla = models.ForeignKey(Isla, on_delete=models.PROTECT, related_name='turnos')
+    horario = models.CharField(max_length=10, choices=HORARIOS)
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='ABIERTO')
@@ -52,7 +101,7 @@ class Turno(models.Model):
         verbose_name_plural = 'Turnos'
 
     def __str__(self):
-        return f"Turno {self.id} - {self.operador.nombre} - {self.estado}"
+        return f"Turno {self.id} - {self.operador.nombre} - Isla {self.isla.numero}"
 
 
 class Cliente(models.Model):
@@ -89,7 +138,8 @@ class Venta(models.Model):
 
     id = models.BigAutoField(primary_key=True)
     turno = models.ForeignKey(Turno, on_delete=models.PROTECT, related_name='ventas')
-    surtidor = models.ForeignKey(Surtidor, on_delete=models.PROTECT, related_name='ventas')
+    lado = models.ForeignKey(Lado, on_delete=models.PROTECT, related_name='ventas')
+    tipo_combustible = models.ForeignKey(TipoCombustible, on_delete=models.PROTECT, related_name='ventas')
     cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
     litros = models.DecimalField(max_digits=10, decimal_places=3)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)

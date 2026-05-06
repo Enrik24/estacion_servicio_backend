@@ -7,9 +7,9 @@ from django.utils import timezone
 from django.db import transaction
 import uuid
 
-from .models import Isla, Lado, TipoCombustible, Turno, Cliente, Venta
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
 from .serializers import (
-    IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
+    SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
     TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer
 )
 from utils.permissions import HasPermiso
@@ -235,3 +235,31 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response(VentaSerializer(ventas, many=True).data)
         except Turno.DoesNotExist:
             return Response({'ventas': [], 'mensaje': 'No tienes turno abierto'})
+
+class SucursalViewSet(viewsets.ModelViewSet):
+    queryset = Sucursal.objects.all()
+    serializer_class = SucursalSerializer
+    permission_classes = [IsAuthenticated, HasPermiso]
+    permiso_requerido = 'sucursales.ver'
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated(), HasPermiso(permiso='sucursales.crear')]
+        elif self.action in ['update', 'partial_update']:
+            return [IsAuthenticated(), HasPermiso(permiso='sucursales.editar')]
+        elif self.action == 'destroy':
+            return [IsAuthenticated(), HasPermiso(permiso='sucursales.eliminar')]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        sucursal = serializer.save()
+        # Crear islas y lados automáticamente
+        for i in range(1, sucursal.cantidad_islas + 1):
+            isla = Isla.objects.create(
+                numero=i,
+                sucursal=sucursal,
+                estado='ACTIVO'
+            )
+            Lado.objects.create(isla=isla, lado='A', activo=True)
+            Lado.objects.create(isla=isla, lado='B', activo=True)        
+        

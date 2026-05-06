@@ -53,6 +53,12 @@ class Command(BaseCommand):
             {'codigo': 'clientes.crear', 'nombre': 'Crear clientes', 'descripcion': 'Crear nuevos clientes'},
             {'codigo': 'clientes.editar', 'nombre': 'Editar clientes', 'descripcion': 'Editar clientes existentes'},
             {'codigo': 'clientes.eliminar', 'nombre': 'Eliminar clientes', 'descripcion': 'Eliminar clientes'},
+
+            # Sucursales
+            {'codigo': 'sucursales.ver', 'nombre': 'Ver sucursales', 'descripcion': 'Ver lista de sucursales'},
+            {'codigo': 'sucursales.crear', 'nombre': 'Crear sucursales', 'descripcion': 'Crear nuevas sucursales'},
+            {'codigo': 'sucursales.editar', 'nombre': 'Editar sucursales', 'descripcion': 'Editar sucursales existentes'},
+            {'codigo': 'sucursales.eliminar', 'nombre': 'Eliminar sucursales', 'descripcion': 'Eliminar sucursales'},
         ]
 
         permisos_creados = {}
@@ -93,6 +99,7 @@ class Command(BaseCommand):
             permisos_creados.get('ventas.ver'),
             permisos_creados.get('surtidores.ver'),
             permisos_creados.get('clientes.ver'),
+            permisos_creados.get('sucursales.ver'),
         ]
 
         permisos_auditor = [
@@ -230,10 +237,10 @@ class Command(BaseCommand):
 
         # Crear tipos de combustible
         tipos_data = [
-            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 3.74},
-            {'tipo': 'GASOLINA_PREMIUM', 'precio_litro': 4.79},
-            {'tipo': 'DIESEL', 'precio_litro': 3.72},
-            {'tipo': 'GNV', 'precio_litro': 1.66},
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
+            {'tipo': 'GASOLINA_PREMIUM', 'precio_litro': 11.00},
+            {'tipo': 'DIESEL', 'precio_litro': 9.80},
+            {'tipo': 'GNV', 'precio_litro': 2.73},
         ]
 
         for tipo_data in tipos_data:

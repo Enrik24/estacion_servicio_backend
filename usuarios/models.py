@@ -98,7 +98,13 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['nombre']
 
     objects = UsuarioManager()
-
+    sucursal = models.ForeignKey(
+    'ventas.Sucursal',
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='usuarios'
+)
     class Meta:
         db_table = 'usuarios'
         verbose_name = 'Usuario'

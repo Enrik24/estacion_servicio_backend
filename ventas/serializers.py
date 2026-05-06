@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Isla, Lado, TipoCombustible, Turno, Cliente, Venta
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
 
 
 class IslaSerializer(serializers.ModelSerializer):
@@ -15,11 +15,14 @@ class IslaSerializer(serializers.ModelSerializer):
 
 class LadoSerializer(serializers.ModelSerializer):
     isla_numero = serializers.IntegerField(source='isla.numero', read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
 
     class Meta:
         model = Lado
         fields = '__all__'
 
+    def get_nombre_completo(self, obj):
+        return f"Isla {obj.isla.numero} - Lado {obj.lado}"
 
 class TipoCombustibleSerializer(serializers.ModelSerializer):
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
@@ -78,3 +81,13 @@ class RegistrarVentaSerializer(serializers.Serializer):
         if value <= 0:
             raise serializers.ValidationError('Los litros deben ser mayor a cero')
         return value
+#SUCURSAL
+class SucursalSerializer(serializers.ModelSerializer):
+    cantidad_islas_creadas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Sucursal
+        fields = '__all__'
+
+    def get_cantidad_islas_creadas(self, obj):
+        return obj.islas.count()    

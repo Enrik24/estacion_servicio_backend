@@ -24,7 +24,33 @@ class TipoCombustible(models.Model):
     def __str__(self):
         return f"{self.get_tipo_display()} - Bs. {self.precio_litro}/Lt"
 
+class Sucursal(models.Model):
+    ESTADOS = [
+        ('ACTIVA', 'Activa'),
+        ('INACTIVA', 'Inactiva'),
+    ]
 
+    id = models.BigAutoField(primary_key=True)
+    nombre = models.CharField(max_length=150)
+    direccion = models.CharField(max_length=255)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    nit = models.CharField(max_length=20, blank=True, null=True)
+    cantidad_islas = models.IntegerField(default=1)
+    tiene_gnv = models.BooleanField(default=False)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVA')
+    latitud = models.DecimalField(max_digits=10, decimal_places=7, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=10, decimal_places=7, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sucursales'
+        verbose_name = 'Sucursal'
+        verbose_name_plural = 'Sucursales'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
 class Isla(models.Model):
     ESTADOS = [
         ('ACTIVO', 'Activo'),
@@ -38,7 +64,13 @@ class Isla(models.Model):
     descripcion = models.CharField(max_length=150, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='islas',
+        null=True,
+        blank=True
+    )
     class Meta:
         db_table = 'islas'
         verbose_name = 'Isla'

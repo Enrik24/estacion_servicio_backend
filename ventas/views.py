@@ -1,3 +1,5 @@
+from urllib import request
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -118,7 +120,41 @@ class TurnoViewSet(viewsets.ModelViewSet):
             return Response(TurnoSerializer(turno).data)
         except Turno.DoesNotExist:
             return Response({'turno': None})
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def resumen(self, request):
+        fecha = request.query_params.get('fecha', None)
+        horario = request.query_params.get('horario', None)
 
+        turnos = Turno.objects.select_related('operador', 'isla').all()
+
+        if fecha:
+            turnos = turnos.filter(fecha_apertura__date=fecha)
+        else:
+            turnos = turnos.filter(fecha_apertura__date=timezone.now().date())
+
+        if horario:
+            turnos = turnos.filter(horario=horario)
+
+        data = []
+        for turno in turnos:
+            ventas = Venta.objects.filter(turno=turno, estado='COMPLETADA')
+            total_ventas = sum(v.total for v in ventas)
+            total_litros = sum(v.litros for v in ventas)
+            data.append({
+                'id': turno.id,
+                'operador': turno.operador.nombre,
+                'isla': turno.isla.numero,
+                'horario': turno.get_horario_display(),
+                'horario_codigo': turno.horario,
+                'estado': turno.estado,
+                'fecha_apertura': turno.fecha_apertura,
+                'fecha_cierre': turno.fecha_cierre,
+                'total_ventas': float(total_ventas),
+                'total_litros': float(total_litros),
+                'cantidad_ventas': ventas.count(),
+            })
+
+        return Response(data)
 
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.filter(activo=True)

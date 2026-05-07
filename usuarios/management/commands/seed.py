@@ -51,6 +51,19 @@ class Command(BaseCommand):
             
             # Permisos de reportes
             {'codigo': 'reportes.ver', 'nombre': 'Ver Reportes', 'descripcion': 'Permiso para ver reportes de la gasolinera'},
+
+            # Permisos de clientes
+            {'codigo': 'clientes.ver', 'nombre': 'Ver Clientes', 'descripcion': 'Permiso para ver clientes'},
+            {'codigo': 'clientes.crear', 'nombre': 'Crear Clientes', 'descripcion': 'Permiso para crear clientes'},
+            {'codigo': 'clientes.editar', 'nombre': 'Editar Clientes', 'descripcion': 'Permiso para editar clientes'},
+            {'codigo': 'clientes.eliminar', 'nombre': 'Eliminar Clientes', 'descripcion': 'Permiso para desactivar clientes'},
+
+            # Permisos de límites de consumo
+            {'codigo': 'limites_consumo.ver', 'nombre': 'Ver Límites de Consumo', 'descripcion': 'Permiso para ver límites de consumo'},
+            {'codigo': 'limites_consumo.crear', 'nombre': 'Crear Límites de Consumo', 'descripcion': 'Permiso para crear límites de consumo'},
+            {'codigo': 'limites_consumo.editar', 'nombre': 'Editar Límites de Consumo', 'descripcion': 'Permiso para editar límites de consumo'},
+            {'codigo': 'limites_consumo.eliminar', 'nombre': 'Eliminar Límites de Consumo', 'descripcion': 'Permiso para eliminar límites de consumo'},
+            {'codigo': 'limites_consumo.validar', 'nombre': 'Validar Consumo', 'descripcion': 'Permiso para validar consumos contra límites'},
         ]
         
         permisos_creados = {}

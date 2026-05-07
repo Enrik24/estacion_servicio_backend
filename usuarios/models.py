@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from .managers import UsuarioManager
 
@@ -111,3 +112,60 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
         if self.is_superuser:
             return True
         return self.roles.filter(permisos__codigo=codigo_permiso).exists()
+
+
+class LimiteConsumo(models.Model):
+    TIPOS = [
+        ('DIARIO', 'Diario'),
+        ('SEMANAL', 'Semanal'),
+        ('MENSUAL', 'Mensual'),
+    ]
+    UNIDADES = [
+        ('LITROS', 'Litros'),
+        ('MONTO', 'Monto'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    cliente = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name='limites_consumo',
+    )
+    tipo = models.CharField(max_length=10, choices=TIPOS)
+    unidad = models.CharField(max_length=10, choices=UNIDADES)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    fecha_inicio = models.DateField(null=True, blank=True)
+    fecha_fin = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='limites_creados',
+    )
+    updated_by = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='limites_actualizados',
+    )
+
+    class Meta:
+        db_table = 'limites_consumo'
+        verbose_name = 'Límite de Consumo'
+        verbose_name_plural = 'Límites de Consumo'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cliente', 'tipo'],
+                condition=Q(is_active=True),
+                name='uq_limite_activo_cliente_tipo',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.cliente.email} - {self.tipo} ({self.unidad}: {self.valor})"

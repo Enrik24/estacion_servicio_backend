@@ -1,11 +1,16 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UsuarioViewSet, RolViewSet, PermisoViewSet, login_view, logout_view, asignar_roles
+from .views import (
+    UsuarioViewSet, RolViewSet, PermisoViewSet, ClienteViewSet,
+    LimiteConsumoViewSet, login_view, logout_view, asignar_roles
+)
 
 router = DefaultRouter()
 router.register(r'usuarios', UsuarioViewSet)
+router.register(r'clientes', ClienteViewSet, basename='clientes')
 router.register(r'roles', RolViewSet)
 router.register(r'permisos', PermisoViewSet)
+router.register(r'limites-consumo', LimiteConsumoViewSet, basename='limites-consumo')
 
 urlpatterns = [
     path('', include(router.urls)),

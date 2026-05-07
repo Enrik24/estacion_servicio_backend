@@ -243,3 +243,15 @@ class ValidarConsumoSerializer(serializers.Serializer):
             raise serializers.ValidationError({'cliente_id': 'Cliente no encontrado.'})
         attrs['fecha'] = attrs.get('fecha') or timezone.localdate()
         return attrs
+
+
+class PrediccionConsumoRequestSerializer(serializers.Serializer):
+    cliente_id = serializers.IntegerField(required=True)
+    tipo_periodo = serializers.ChoiceField(choices=LimiteConsumo.TIPOS, required=False, default='DIARIO')
+    unidad = serializers.ChoiceField(choices=LimiteConsumo.UNIDADES, required=False, default='MONTO')
+    dias = serializers.IntegerField(required=False, min_value=1, max_value=31, default=7)
+
+    def validate_cliente_id(self, value):
+        if not Usuario.objects.filter(id=value).exists():
+            raise serializers.ValidationError('Cliente no encontrado.')
+        return value

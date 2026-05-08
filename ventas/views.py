@@ -202,15 +202,26 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Lado no válido para tu isla asignada'}, status=status.HTTP_400_BAD_REQUEST)
 
         tipo_combustible = TipoCombustible.objects.get(id=data['tipo_combustible_id'])
-        litros = data['litros']
         precio_unitario = tipo_combustible.precio_litro
-        total = litros * precio_unitario
+
+        es_lleno = data.get('es_lleno', False)
+
+        if es_lleno:
+            # Para "lleno" el total lo define el surtidor al terminar,
+            # por ahora registramos litros=0 y total=0 como despacho abierto.
+            # Si quieres bloquearlo puedes retornar error aquí hasta tener integración con surtidor.
+            litros = None
+            total = None
+        else:
+            monto_bs = data['monto_bs']
+            litros = round(monto_bs / precio_unitario, 3)
+            total = monto_bs
 
         cliente = None
         if data.get('cliente_id'):
             try:
                 cliente = Cliente.objects.get(id=data['cliente_id'], activo=True)
-                if data['metodo_pago'] == 'CREDITO_FLEET':
+                if data['metodo_pago'] == 'CREDITO_FLEET' and total is not None:
                     if total > cliente.saldo_credito:
                         return Response(
                             {'error': f'Saldo insuficiente. Disponible: Bs. {cliente.saldo_credito}'},
@@ -228,13 +239,16 @@ class VentaViewSet(viewsets.ModelViewSet):
             lado=lado,
             tipo_combustible=tipo_combustible,
             cliente=cliente,
-            litros=litros,
+            litros=litros if litros is not None else 0,
             precio_unitario=precio_unitario,
-            total=total,
+            total=total if total is not None else 0,
             metodo_pago=data['metodo_pago'],
             numero_comprobante=numero_comprobante,
             created_by=request.user
         )
+
+        desc = f'Lleno - {tipo_combustible.get_tipo_display()}' if es_lleno else \
+            f'Registró venta de {litros} Lt de {tipo_combustible.get_tipo_display()} - Bs. {total}'
 
         Bitacora.objects.create(
             usuario=request.user,
@@ -244,13 +258,12 @@ class VentaViewSet(viewsets.ModelViewSet):
             accion='CREAR',
             estado='EXITO',
             modulo_afectado='Ventas',
-            descripcion=f'Registró venta de {litros} Lt de {tipo_combustible.get_tipo_display()} - Bs. {total}',
+            descripcion=desc,
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )
 
         return Response(VentaSerializer(venta).data, status=status.HTTP_201_CREATED)
-
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def anular(self, request, pk=None):
         venta = self.get_object()

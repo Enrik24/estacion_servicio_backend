@@ -66,9 +66,12 @@ class VentaSerializer(serializers.ModelSerializer):
 class RegistrarVentaSerializer(serializers.Serializer):
     lado_id = serializers.IntegerField()
     tipo_combustible_id = serializers.IntegerField()
-    litros = serializers.DecimalField(max_digits=10, decimal_places=3)
     metodo_pago = serializers.ChoiceField(choices=Venta.METODOS_PAGO)
     cliente_id = serializers.IntegerField(required=False, allow_null=True)
+    monto_bs = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+    es_lleno = serializers.BooleanField(default=False)
 
     def validate_tipo_combustible_id(self, value):
         try:
@@ -77,10 +80,14 @@ class RegistrarVentaSerializer(serializers.Serializer):
             raise serializers.ValidationError('Tipo de combustible no encontrado o inactivo')
         return value
 
-    def validate_litros(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('Los litros deben ser mayor a cero')
-        return value
+    def validate(self, data):
+        if not data.get('es_lleno') and not data.get('monto_bs'):
+            raise serializers.ValidationError(
+                'Debes ingresar un monto en Bs o seleccionar "Lleno"'
+            )
+        if data.get('monto_bs') and data['monto_bs'] <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero')
+        return data
 #SUCURSAL
 class SucursalSerializer(serializers.ModelSerializer):
     cantidad_islas_creadas = serializers.SerializerMethodField()

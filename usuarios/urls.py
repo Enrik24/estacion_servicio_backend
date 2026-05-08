@@ -4,6 +4,7 @@ from .views import (
     UsuarioViewSet, RolViewSet, PermisoViewSet, ClienteViewSet,
     LimiteConsumoViewSet, login_view, logout_view, asignar_roles
 )
+from .predicciones_views import PrediccionConsumoAPIView
 
 router = DefaultRouter()
 router.register(r'usuarios', UsuarioViewSet)
@@ -17,4 +18,5 @@ urlpatterns = [
     path('auth/login/', login_view, name='login'),
     path('auth/logout/', logout_view, name='logout'),
     path('usuarios/<int:pk>/asignar-roles/', asignar_roles, name='asignar-roles'),
+    path('predicciones-consumo/', PrediccionConsumoAPIView.as_view(), name='predicciones-consumo'),
 ]

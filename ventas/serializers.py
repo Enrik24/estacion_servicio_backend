@@ -1,0 +1,132 @@
+from rest_framework import serializers
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta,Vehiculo
+
+
+class IslaSerializer(serializers.ModelSerializer):
+    lados = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Isla
+        fields = '__all__'
+
+    def get_lados(self, obj):
+        return [{'id': l.id, 'lado': l.lado} for l in obj.lados.filter(activo=True)]
+
+
+class LadoSerializer(serializers.ModelSerializer):
+    isla_numero = serializers.IntegerField(source='isla.numero', read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lado
+        fields = '__all__'
+
+    def get_nombre_completo(self, obj):
+        return f"Isla {obj.isla.numero} - Lado {obj.lado}"
+
+class TipoCombustibleSerializer(serializers.ModelSerializer):
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+
+    class Meta:
+        model = TipoCombustible
+        fields = '__all__'
+
+
+class TurnoSerializer(serializers.ModelSerializer):
+    operador_nombre = serializers.CharField(source='operador.nombre', read_only=True)
+    isla_numero = serializers.IntegerField(source='isla.numero', read_only=True)
+    horario_display = serializers.CharField(source='get_horario_display', read_only=True)
+    operador = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Turno
+        fields = '__all__'
+        read_only_fields = ['fecha_apertura', 'estado', 'operador']
+
+
+class ClienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Cliente
+        fields = '__all__'
+
+
+class VentaSerializer(serializers.ModelSerializer):
+    tipo_combustible_nombre = serializers.CharField(source='tipo_combustible.get_tipo_display', read_only=True)
+    cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    operador_nombre = serializers.CharField(source='created_by.nombre', read_only=True)
+    isla_numero = serializers.IntegerField(source='turno.isla.numero', read_only=True)
+    lado_nombre = serializers.CharField(source='lado.lado', read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = '__all__'
+        read_only_fields = ['total', 'precio_unitario', 'numero_comprobante', 'fecha_hora', 'created_by']
+
+
+class RegistrarVentaSerializer(serializers.Serializer):
+    lado_id = serializers.IntegerField()
+    tipo_combustible_id = serializers.IntegerField()
+    metodo_pago = serializers.ChoiceField(choices=Venta.METODOS_PAGO)
+    cliente_id = serializers.IntegerField(required=False, allow_null=True)
+    monto_bs = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+    es_lleno = serializers.BooleanField(default=False)
+
+    def validate_tipo_combustible_id(self, value):
+        try:
+            TipoCombustible.objects.get(id=value, activo=True)
+        except TipoCombustible.DoesNotExist:
+            raise serializers.ValidationError('Tipo de combustible no encontrado o inactivo')
+        return value
+
+    def validate(self, data):
+        if not data.get('es_lleno') and not data.get('monto_bs'):
+            raise serializers.ValidationError(
+                'Debes ingresar un monto en Bs o seleccionar "Lleno"'
+            )
+        if data.get('monto_bs') and data['monto_bs'] <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero')
+        return data
+    
+class VehiculoSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    cliente_nit = serializers.CharField(source='cliente.nit', read_only=True)
+    cliente_telefono = serializers.CharField(source='cliente.telefono', read_only=True)
+    cliente_id = serializers.IntegerField(source='cliente.id', read_only=True)
+
+    class Meta:
+        model = Vehiculo
+        fields = ['id', 'placa', 'marca', 'modelo', 'color',
+                  'cliente_id', 'cliente_nombre', 'cliente_nit', 'cliente_telefono']
+
+
+class RegistrarClienteVehiculoSerializer(serializers.Serializer):
+    nombre = serializers.CharField(max_length=150)
+    nit = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    placa = serializers.CharField(max_length=20)
+    marca = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    modelo = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    color = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+
+    def validate_placa(self, value):
+        placa = value.upper().strip()
+        if Vehiculo.objects.filter(placa=placa).exists():
+            raise serializers.ValidationError('Ya existe un vehículo con esta placa')
+        return placa
+
+    def validate_nit(self, value):
+        if value and Cliente.objects.filter(nit=value).exists():
+            raise serializers.ValidationError('Ya existe un cliente con este NIT')
+        return value    
+#SUCURSAL
+class SucursalSerializer(serializers.ModelSerializer):
+    cantidad_islas_creadas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Sucursal
+        fields = '__all__'
+
+    def get_cantidad_islas_creadas(self, obj):
+        return obj.islas.count()    

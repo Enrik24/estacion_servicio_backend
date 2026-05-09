@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta,Vehiculo
 
 
 class IslaSerializer(serializers.ModelSerializer):
@@ -88,6 +88,38 @@ class RegistrarVentaSerializer(serializers.Serializer):
         if data.get('monto_bs') and data['monto_bs'] <= 0:
             raise serializers.ValidationError('El monto debe ser mayor a cero')
         return data
+    
+class VehiculoSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    cliente_nit = serializers.CharField(source='cliente.nit', read_only=True)
+    cliente_telefono = serializers.CharField(source='cliente.telefono', read_only=True)
+    cliente_id = serializers.IntegerField(source='cliente.id', read_only=True)
+
+    class Meta:
+        model = Vehiculo
+        fields = ['id', 'placa', 'marca', 'modelo', 'color',
+                  'cliente_id', 'cliente_nombre', 'cliente_nit', 'cliente_telefono']
+
+
+class RegistrarClienteVehiculoSerializer(serializers.Serializer):
+    nombre = serializers.CharField(max_length=150)
+    nit = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    placa = serializers.CharField(max_length=20)
+    marca = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    modelo = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    color = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+
+    def validate_placa(self, value):
+        placa = value.upper().strip()
+        if Vehiculo.objects.filter(placa=placa).exists():
+            raise serializers.ValidationError('Ya existe un vehículo con esta placa')
+        return placa
+
+    def validate_nit(self, value):
+        if value and Cliente.objects.filter(nit=value).exists():
+            raise serializers.ValidationError('Ya existe un cliente con este NIT')
+        return value    
 #SUCURSAL
 class SucursalSerializer(serializers.ModelSerializer):
     cantidad_islas_creadas = serializers.SerializerMethodField()

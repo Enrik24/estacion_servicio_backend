@@ -1,6 +1,7 @@
 from urllib import request
 
 from rest_framework import viewsets, status
+from rest_framework.viewsets import GenericViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -9,10 +10,10 @@ from django.utils import timezone
 from django.db import transaction
 import uuid
 
-from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta,Vehiculo
 from .serializers import (
     SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
-    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer
+    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
@@ -284,7 +285,46 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response(VentaSerializer(ventas, many=True).data)
         except Turno.DoesNotExist:
             return Response({'ventas': [], 'mensaje': 'No tienes turno abierto'})
+class VehiculoViewSet(GenericViewSet):
+    permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['get'])
+    def buscar_placa(self, request):
+        placa = request.query_params.get('placa', '').upper().strip()
+        if not placa:
+            return Response({'error': 'Debes ingresar una placa'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            vehiculo = Vehiculo.objects.select_related('cliente').get(placa=placa, activo=True)
+            return Response({
+                'encontrado': True,
+                'vehiculo': VehiculoSerializer(vehiculo).data
+            })
+        except Vehiculo.DoesNotExist:
+            return Response({'encontrado': False})
+
+    @action(detail=False, methods=['post'])
+    def registrar_cliente_vehiculo(self, request):
+        serializer = RegistrarClienteVehiculoSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        with transaction.atomic():
+            cliente = Cliente.objects.create(
+                nombre=data['nombre'],
+                nit=data.get('nit') or None,
+                telefono=data.get('telefono') or None,
+            )
+            vehiculo = Vehiculo.objects.create(
+                cliente=cliente,
+                placa=data['placa'],
+                marca=data.get('marca') or None,
+                modelo=data.get('modelo') or None,
+                color=data.get('color') or None,
+            )
+        return Response({
+            'encontrado': True,
+            'vehiculo': VehiculoSerializer(vehiculo).data
+        }, status=status.HTTP_201_CREATED)
 class SucursalViewSet(viewsets.ModelViewSet):
     queryset = Sucursal.objects.all()
     serializer_class = SucursalSerializer

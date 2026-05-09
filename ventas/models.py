@@ -154,7 +154,24 @@ class Cliente(models.Model):
 
     def __str__(self):
         return f"{self.nombre} - {self.nit}"
+    
+class Vehiculo(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='vehiculos')
+    placa = models.CharField(max_length=20, unique=True)
+    marca = models.CharField(max_length=50, blank=True, null=True)
+    modelo = models.CharField(max_length=50, blank=True, null=True)
+    color = models.CharField(max_length=30, blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        db_table = 'vehiculos'
+        verbose_name = 'Vehículo'
+        verbose_name_plural = 'Vehículos'
+
+    def __str__(self):
+        return f"{self.placa} - {self.cliente.nombre}"
 
 class Venta(models.Model):
     METODOS_PAGO = [

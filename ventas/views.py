@@ -12,7 +12,7 @@ import uuid
 from .models import Turno, Cliente, Venta, Usuario, Isla, Lado, TipoCombustible, Sucursal
 
 from .serializers import (
-    SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
+    ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
     TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer
 )
 from utils.permissions import HasPermiso
@@ -313,4 +313,52 @@ class SucursalViewSet(viewsets.ModelViewSet):
             )
             Lado.objects.create(isla=isla, lado='A', activo=True)
             Lado.objects.create(isla=isla, lado='B', activo=True)        
+
+
+class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated, HasPermiso]
+    permiso_requerido = 'turnos.ver'
+    queryset = Turno.objects.all()
+    
+    def list(self, request):
+        turnos_qs = Turno.objects.filter(estado='CERRADO')
+        serializer = ConsolidacionCajaSerializer(turnos_qs, many=True)
+
+        data_tabla = serializer.data
+
+        total_facturas_emitidas = sum(item['total_facturas'] for item in data_tabla)
+        monto_faltantes_total = sum(abs(item['diferencia']) for item in data_tabla if item['diferencia'] < 0)
+        turnos_pendientes_count = turnos_qs.count()
+
+        return Response({
+            'indicadores': {
+                'turnos_pendientes': turnos_pendientes_count,
+                'total_facturas': total_facturas_emitidas,
+                'monto_faltantes': monto_faltantes_total,
+            },
+            'tabla': data_tabla
+        })
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermiso])
+    def consolidar(self, request, pk=None):
+        turno = Turno.objects.get()
+        if turno.estado != 'CERRADO':
+            return Response({'error': 'Solo se pueden consolidar turnos cerrados'}, status=status.HTTP_400_BAD_REQUEST)
         
+        with transaction.atomic():
+            turno.consolidado = True
+            turno.save()
+
+            Bitacora.objects.create(
+                usuario=request.user,
+                usuario_email=request.user.email,
+                usuario_nombre=request.user.nombre,
+                usuario_rol=request.user.nombre_rol,
+                accion='CREAR',
+                estado='EXITO',
+                modulo_afectado='Venta y POS',
+                descripcion=f'Consolidación de Caja - Turno #{turno.id}',
+                ip_address=getattr(request, 'ip_address', None),
+                user_agent=getattr(request, 'user_agent', '')[:500]
+            )
+        return Response({'mensaje': 'Turno consolidado correctamente'})

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
+from django.db.models import Sum
 
 
 class IslaSerializer(serializers.ModelSerializer):
@@ -90,4 +91,36 @@ class SucursalSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_cantidad_islas_creadas(self, obj):
-        return obj.islas.count()    
+        return obj.islas.count()
+
+class ConsolidacionCajaSerializer(serializers.Serializer):
+    operador_nombre = serializers.ReadOnlyField(source='operador.nombre')
+    ubicacion = serializers.SerializerMethodField()
+    monto_sistema = serializers.SerializerMethodField()
+    diferencia = serializers.SerializerMethodField()
+    total_facturas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Turno
+        fields = [
+            'operador_nombre',
+            'ubicacion', 'monto_sistema',
+            'diferencia',
+            'total_facturas'
+            ]
+        
+    def get_ubicacion(self, obj):
+        return f"Sucursal: {obj.isla.sucursal.nombre} - Isla: {obj.isla.numero}"
+        
+    def get_monto_sistema(self, obj):
+        total = obj.ventas.filter(estado='COMPLETADA').aggregate(Sum('total'))['total__sum']
+        return total or 0
+        
+    def get_diferencia(self, obj):
+        monto_sistema = self.get_monto_sistema(obj)
+        monto_final = obj.monto_final or 0
+        return monto_final - monto_sistema
+        
+    def get_total_facturas(self, obj):
+        return obj.ventas.filter(estado='COMPLETADA').count()
+        

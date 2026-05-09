@@ -190,3 +190,5 @@ class Venta(models.Model):
 
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
+    
+

@@ -93,34 +93,54 @@ class SucursalSerializer(serializers.ModelSerializer):
     def get_cantidad_islas_creadas(self, obj):
         return obj.islas.count()
 
+# Serializador para la consolidación de caja - prepara datos de turnos cerrados para reporte
 class ConsolidacionCajaSerializer(serializers.Serializer):
+    # Campo de solo lectura: obtiene el nombre del operador del turno
     operador_nombre = serializers.ReadOnlyField(source='operador.nombre')
+    
+    # Campo calculado: genera ubicación completa (sucursal e isla)
     ubicacion = serializers.SerializerMethodField()
+    
+    # Campo calculado: suma total de ventas completadas del turno
     monto_sistema = serializers.SerializerMethodField()
+    
+    # Campo calculado: diferencia entre monto registrado en caja y monto del sistema
     diferencia = serializers.SerializerMethodField()
+    
+    # Campo calculado: cantidad total de facturas (ventas completadas)
     total_facturas = serializers.SerializerMethodField()
 
     class Meta:
         model = Turno
+        # Define qué campos se incluyen en la serialización
         fields = [
             'operador_nombre',
-            'ubicacion', 'monto_sistema',
+            'ubicacion', 
+            'monto_sistema',
             'diferencia',
             'total_facturas'
             ]
-        
+    
+    # Método que calcula y retorna la ubicación formateada (sucursal + isla)
     def get_ubicacion(self, obj):
         return f"Sucursal: {obj.isla.sucursal.nombre} - Isla: {obj.isla.numero}"
-        
+    
+    # Método que obtiene el total de ventas completadas sumando todos los montos
     def get_monto_sistema(self, obj):
+        # Filtra ventas completadas y suma sus totales; retorna 0 si no hay ventas
         total = obj.ventas.filter(estado='COMPLETADA').aggregate(Sum('total'))['total__sum']
         return total or 0
-        
+    
+    # Método que calcula la diferencia entre caja física y sistema
     def get_diferencia(self, obj):
+        # Obtiene el monto total del sistema
         monto_sistema = self.get_monto_sistema(obj)
+        # Obtiene el monto final registrado en caja (o 0 si está vacío)
         monto_final = obj.monto_final or 0
+        # Retorna la diferencia: positiva (sobrante) o negativa (faltante)
         return monto_final - monto_sistema
-        
+    
+    # Método que cuenta el total de ventas completadas en el turno
     def get_total_facturas(self, obj):
         return obj.ventas.filter(estado='COMPLETADA').count()
         

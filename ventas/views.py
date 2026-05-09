@@ -315,21 +315,32 @@ class SucursalViewSet(viewsets.ModelViewSet):
             Lado.objects.create(isla=isla, lado='B', activo=True)        
 
 
+# ViewSet para gestionar la consolidación de caja - proporciona reportes de cierre de turnos
 class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
+    # Requiere autenticación y permiso 'turnos.ver'
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'turnos.ver'
+    # Consulta todos los turnos (se filtra en los métodos específicos)
     queryset = Turno.objects.all()
     
+    # Método que lista todos los turnos cerrados con consolidación de caja
     def list(self, request):
+        # Obtiene solo los turnos en estado CERRADO
         turnos_qs = Turno.objects.filter(estado='CERRADO')
+        # Serializa los turnos usando ConsolidacionCajaSerializer
         serializer = ConsolidacionCajaSerializer(turnos_qs, many=True)
 
+        # Extrae los datos serializados
         data_tabla = serializer.data
 
+        # Calcula el total de facturas emitidas sumando todas las facturas de todos los turnos
         total_facturas_emitidas = sum(item['total_facturas'] for item in data_tabla)
+        # Calcula el monto de faltantes totales (diferencias negativas)
         monto_faltantes_total = sum(abs(item['diferencia']) for item in data_tabla if item['diferencia'] < 0)
+        # Cuenta la cantidad de turnos pendientes de consolidar
         turnos_pendientes_count = turnos_qs.count()
 
+        # Retorna respuesta con indicadores y tabla de datos
         return Response({
             'indicadores': {
                 'turnos_pendientes': turnos_pendientes_count,
@@ -339,16 +350,22 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
             'tabla': data_tabla
         })
     
+    # Acción personalizada POST para consolidar un turno específico
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermiso])
     def consolidar(self, request, pk=None):
-        turno = Turno.objects.get()
+        # Obtiene el turno por su ID (pk)
+        turno = Turno.objects.get(pk=pk)
+        # Valida que el turno esté cerrado antes de consolidar
         if turno.estado != 'CERRADO':
             return Response({'error': 'Solo se pueden consolidar turnos cerrados'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Utiliza transacción atómica para asegurar integridad de datos
         with transaction.atomic():
+            # Marca el turno como consolidado
             turno.consolidado = True
             turno.save()
 
+            # Registra la acción en la bitácora de auditoría
             Bitacora.objects.create(
                 usuario=request.user,
                 usuario_email=request.user.email,
@@ -361,4 +378,5 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
                 ip_address=getattr(request, 'ip_address', None),
                 user_agent=getattr(request, 'user_agent', '')[:500]
             )
+        # Retorna confirmación del consolidado
         return Response({'mensaje': 'Turno consolidado correctamente'})

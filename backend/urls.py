@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/', include('usuarios.urls')),      # Usuarios, Roles, Permisos
     path('api/seguridad/', include('seguridad.urls')),  # Bitácora
     path('api/', include('ventas.urls')),
+    path('api/reportes/', include('reportes.urls')),
 ]

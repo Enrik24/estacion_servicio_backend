@@ -12,7 +12,8 @@ import uuid
 from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
 from .serializers import (
     SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
-    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer
+    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer,
+    TicketVentaSerializer
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
@@ -271,6 +272,12 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response(VentaSerializer(ventas, many=True).data)
         except Turno.DoesNotExist:
             return Response({'ventas': [], 'mensaje': 'No tienes turno abierto'})
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, HasPermiso])
+    def ticket(self, request, pk=None):
+        venta = self.get_object()
+        serializer = TicketVentaSerializer(venta)
+        return Response(serializer.data)
 
 class SucursalViewSet(viewsets.ModelViewSet):
     queryset = Sucursal.objects.all()

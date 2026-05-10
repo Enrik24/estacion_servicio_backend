@@ -104,6 +104,7 @@ class VehiculoSerializer(serializers.ModelSerializer):
 class RegistrarClienteVehiculoSerializer(serializers.Serializer):
     nombre = serializers.CharField(max_length=150)
     nit = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    ci = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
     telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
     placa = serializers.CharField(max_length=20)
     marca = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)

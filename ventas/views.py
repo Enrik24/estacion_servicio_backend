@@ -17,7 +17,8 @@ from .serializers import (
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
-
+from usuarios.models import Usuario, Rol
+import re
 
 class IslaViewSet(viewsets.ModelViewSet):
     queryset = Isla.objects.prefetch_related('lados').all()
@@ -141,6 +142,17 @@ class TurnoViewSet(viewsets.ModelViewSet):
             ventas = Venta.objects.filter(turno=turno, estado='COMPLETADA')
             total_ventas = sum(v.total for v in ventas)
             total_litros = sum(v.litros for v in ventas)
+
+            # ✅ Litros agrupados por tipo de combustible
+            litros_por_tipo = {}
+            for v in ventas:
+                tipo = v.tipo_combustible.get_tipo_display()
+                unidad = 'mm3' if v.tipo_combustible.tipo == 'GNV' else 'Lt'
+                key = f"{tipo}"
+                if key not in litros_por_tipo:
+                    litros_por_tipo[key] = {'cantidad': 0, 'unidad': unidad}
+                litros_por_tipo[key]['cantidad'] += float(v.litros)
+
             data.append({
                 'id': turno.id,
                 'operador': turno.operador.nombre,
@@ -153,6 +165,7 @@ class TurnoViewSet(viewsets.ModelViewSet):
                 'total_ventas': float(total_ventas),
                 'total_litros': float(total_litros),
                 'cantidad_ventas': ventas.count(),
+                'litros_por_tipo': litros_por_tipo,  # ✅ nuevo campo
             })
 
         return Response(data)
@@ -171,6 +184,79 @@ class ClienteViewSet(viewsets.ModelViewSet):
         elif self.action == 'destroy':
             return [IsAuthenticated(), HasPermiso(permiso='clientes.eliminar')]
         return super().get_permissions()
+
+    def create(self, request, *args, **kwargs):
+        ci = request.data.get('ci', '').strip()
+
+        # Crear el cliente normalmente
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        cliente = serializer.save()
+
+        # ✅ Crear credenciales automáticas si viene el CI
+        credenciales = None
+        if ci:
+            try:
+                # Generar email desde el nombre
+                nombre_limpio = cliente.nombre.strip().lower()
+                nombre_limpio = re.sub(r'[^a-záéíóúñ\s]', '', nombre_limpio)
+                partes = nombre_limpio.split()
+                primer_nombre = partes[0] if partes else 'cliente'
+                email_generado = f"{primer_nombre}@estacion.com"
+
+                # Si ya existe ese email agregar número
+                base_email = email_generado
+                contador = 1
+                while Usuario.objects.filter(email=email_generado).exists():
+                    email_generado = f"{base_email.replace('@', f'{contador}@')}"
+                    contador += 1
+
+                # Obtener rol Cliente
+                rol_cliente = Rol.objects.filter(
+                    nombre__iexact='cliente'
+                ).first()
+
+                # Crear usuario
+                usuario = Usuario.objects.create_user(
+                    email=email_generado,
+                    nombre=cliente.nombre,
+                    password=ci,
+                    created_by=request.user
+                )
+
+                if rol_cliente:
+                    usuario.roles.add(rol_cliente)
+
+                credenciales = {
+                    'email': email_generado,
+                    'password': ci,
+                }
+
+                # Registrar en bitácora
+                from seguridad.models import Bitacora
+                Bitacora.objects.create(
+                    usuario=request.user,
+                    usuario_email=request.user.email,
+                    usuario_nombre=request.user.nombre,
+                    usuario_rol=request.user.nombre_rol,
+                    accion='CREAR',
+                    estado='EXITO',
+                    modulo_afectado='Usuarios',
+                    descripcion=f'Credenciales creadas automáticamente para cliente {cliente.nombre}',
+                    ip_address=getattr(request, 'ip_address', None),
+                    user_agent=getattr(request, 'user_agent', '')[:500]
+                )
+
+            except Exception as e:
+                # Si falla la creación de credenciales no afecta el registro del cliente
+                credenciales = {'error': str(e)}
+
+        response_data = serializer.data
+        if credenciales:
+            response_data = dict(serializer.data)
+            response_data['credenciales'] = credenciales
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class VentaViewSet(viewsets.ModelViewSet):
@@ -307,7 +393,10 @@ class VehiculoViewSet(GenericViewSet):
         serializer = RegistrarClienteVehiculoSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         data = serializer.validated_data
+        ci = data.get('ci', '').strip() if data.get('ci') else ''
+
         with transaction.atomic():
             cliente = Cliente.objects.create(
                 nombre=data['nombre'],
@@ -321,10 +410,80 @@ class VehiculoViewSet(GenericViewSet):
                 modelo=data.get('modelo') or None,
                 color=data.get('color') or None,
             )
-        return Response({
+
+            # ✅ Crear credenciales automáticas
+            credenciales = None
+            if ci:
+                try:
+                    from usuarios.models import Usuario, Rol
+                    import re
+
+                    # Generar email desde primer nombre
+                    nombre_limpio = cliente.nombre.strip().lower()
+                    nombre_limpio = re.sub(r'[áäà]', 'a', nombre_limpio)
+                    nombre_limpio = re.sub(r'[éëè]', 'e', nombre_limpio)
+                    nombre_limpio = re.sub(r'[íïì]', 'i', nombre_limpio)
+                    nombre_limpio = re.sub(r'[óöò]', 'o', nombre_limpio)
+                    nombre_limpio = re.sub(r'[úüù]', 'u', nombre_limpio)
+                    nombre_limpio = re.sub(r'[ñ]', 'n', nombre_limpio)
+                    nombre_limpio = re.sub(r'[^a-z\s]', '', nombre_limpio)
+                    partes = nombre_limpio.split()
+                    primer_nombre = partes[0] if partes else 'cliente'
+
+                    email_generado = f"{primer_nombre}@estacion.com"
+
+                    # Evitar emails duplicados
+                    base_email = primer_nombre
+                    contador = 1
+                    while Usuario.objects.filter(email=email_generado).exists():
+                        email_generado = f"{base_email}{contador}@estacion.com"
+                        contador += 1
+
+                    # Obtener rol Cliente
+                    rol_cliente = Rol.objects.filter(nombre__iexact='cliente').first()
+
+                    # Crear usuario
+                    usuario = Usuario.objects.create_user(
+                        email=email_generado,
+                        nombre=cliente.nombre,
+                        password=ci,
+                        created_by=request.user
+                    )
+
+                    if rol_cliente:
+                        usuario.roles.add(rol_cliente)
+
+                    credenciales = {
+                        'email': email_generado,
+                        'password': ci,
+                    }
+
+                    # Registrar en bitácora
+                    from seguridad.models import Bitacora
+                    Bitacora.objects.create(
+                        usuario=request.user,
+                        usuario_email=request.user.email,
+                        usuario_nombre=request.user.nombre,
+                        usuario_rol=request.user.nombre_rol,
+                        accion='CREAR',
+                        estado='EXITO',
+                        modulo_afectado='Usuarios',
+                        descripcion=f'Credenciales creadas para cliente {cliente.nombre} - {email_generado}',
+                        ip_address=getattr(request, 'ip_address', None),
+                        user_agent=getattr(request, 'user_agent', '')[:500]
+                    )
+
+                except Exception as e:
+                    credenciales = {'error': str(e)}
+
+        response_data = {
             'encontrado': True,
-            'vehiculo': VehiculoSerializer(vehiculo).data
-        }, status=status.HTTP_201_CREATED)
+            'vehiculo': VehiculoSerializer(vehiculo).data,
+        }
+        if credenciales:
+            response_data['credenciales'] = credenciales
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
 class SucursalViewSet(viewsets.ModelViewSet):
     queryset = Sucursal.objects.all()
     serializer_class = SucursalSerializer

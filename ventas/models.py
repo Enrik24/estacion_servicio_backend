@@ -51,6 +51,7 @@ class Sucursal(models.Model):
 
     def __str__(self):
         return self.nombre
+
 class Isla(models.Model):
     ESTADOS = [
         ('ACTIVO', 'Activo'),
@@ -80,7 +81,6 @@ class Isla(models.Model):
     def __str__(self):
         return f"Isla {self.numero}"
 
-
 class Lado(models.Model):
     LADOS = [
         ('A', 'Lado A'),
@@ -101,7 +101,6 @@ class Lado(models.Model):
 
     def __str__(self):
         return f"Isla {self.isla.numero} - Lado {self.lado}"
-
 
 class Turno(models.Model):
     ESTADOS = [
@@ -126,6 +125,13 @@ class Turno(models.Model):
     monto_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     observaciones = models.TextField(blank=True, null=True)
     consolidado = models.BooleanField(default=False)
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='turnos',
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -135,7 +141,6 @@ class Turno(models.Model):
 
     def __str__(self):
         return f"Turno {self.id} - {self.operador.nombre} - Isla {self.isla.numero}"
-
 
 class Cliente(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -155,7 +160,24 @@ class Cliente(models.Model):
 
     def __str__(self):
         return f"{self.nombre} - {self.nit}"
+    
+class Vehiculo(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='vehiculos')
+    placa = models.CharField(max_length=20, unique=True)
+    marca = models.CharField(max_length=50, blank=True, null=True)
+    modelo = models.CharField(max_length=50, blank=True, null=True)
+    color = models.CharField(max_length=30, blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        db_table = 'vehiculos'
+        verbose_name = 'Vehículo'
+        verbose_name_plural = 'Vehículos'
+
+    def __str__(self):
+        return f"{self.placa} - {self.cliente.nombre}"
 
 class Venta(models.Model):
     METODOS_PAGO = [

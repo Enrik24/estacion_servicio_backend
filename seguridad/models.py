@@ -8,6 +8,8 @@ class Bitacora(models.Model):
         ('CREAR', 'Creación'),
         ('EDITAR', 'Edición'),
         ('ELIMINAR', 'Eliminación'),
+        ('CONSULTAR', 'Consulta'),
+        ('RECUPERACION_CONTRASENA', 'Recuperación de contraseña'),
     ]
     
     ESTADOS = [
@@ -27,7 +29,7 @@ class Bitacora(models.Model):
     usuario_nombre = models.CharField(max_length=150, null=True, blank=True)
     usuario_rol = models.CharField(max_length=150, null=True, blank=True)
     
-    accion = models.CharField(max_length=20, choices=ACCIONES)
+    accion = models.CharField(max_length=30, choices=ACCIONES)
     estado = models.CharField(max_length=20, choices=ESTADOS)
     
     modulo_afectado = models.CharField(max_length=150, null=True, blank=True)

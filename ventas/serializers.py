@@ -420,3 +420,70 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
             'gnv': round(resultado['gnv'], 2)
         }
         
+        return obj.islas.count()
+
+
+# TICKET
+class TicketVentaSerializer(serializers.ModelSerializer):
+    comprobante = serializers.SerializerMethodField()
+    sucursal = serializers.SerializerMethodField()
+    despacho = serializers.SerializerMethodField()
+    operador = serializers.SerializerMethodField()
+    combustible = serializers.SerializerMethodField()
+    pago = serializers.SerializerMethodField()
+    cliente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Venta
+        fields = ['comprobante', 'sucursal', 'despacho', 'operador', 'combustible', 'pago', 'cliente']
+
+    def get_comprobante(self, obj):
+        return {
+            'numero': obj.numero_comprobante,
+            'fecha_hora': obj.fecha_hora,
+            'estado': obj.estado,
+        }
+
+    def get_sucursal(self, obj):
+        sucursal = obj.turno.isla.sucursal
+        if not sucursal:
+            return None
+        return {
+            'nombre': sucursal.nombre,
+            'direccion': sucursal.direccion,
+            'telefono': sucursal.telefono,
+            'nit': sucursal.nit,
+        }
+
+    def get_despacho(self, obj):
+        return {
+            'isla': obj.turno.isla.numero,
+            'lado': obj.lado.lado,
+            'horario': obj.turno.get_horario_display(),
+        }
+
+    def get_operador(self, obj):
+        return {
+            'nombre': obj.created_by.nombre,
+        }
+
+    def get_combustible(self, obj):
+        return {
+            'tipo': obj.tipo_combustible.get_tipo_display(),
+            'litros': str(obj.litros),
+            'precio_unitario': str(obj.precio_unitario),
+            'total': str(obj.total),
+        }
+
+    def get_pago(self, obj):
+        return {
+            'metodo': obj.get_metodo_pago_display(),
+        }
+
+    def get_cliente(self, obj):
+        if not obj.cliente:
+            return None
+        return {
+            'nombre': obj.cliente.nombre,
+            'nit': obj.cliente.nit,
+        }

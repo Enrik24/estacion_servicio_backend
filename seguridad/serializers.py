@@ -4,5 +4,15 @@ from .models import Bitacora
 class BitacoraSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bitacora
-        fields = '__all__'
-        read_only_fields = ['id', 'fecha_hora']
+        fields = [
+            'id',
+            'usuario_nombre',
+            'usuario_email',
+            'usuario_rol',
+            'accion',
+            'modulo_afectado',
+            'descripcion',
+            'ip_address',
+            'user_agent',
+            'fecha_hora'
+        ]

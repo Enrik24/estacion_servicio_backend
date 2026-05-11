@@ -25,6 +25,7 @@ class Permiso(models.Model):
         related_name='permisos_actualizados'
     )
 
+
     class Meta:
         db_table = 'permisos'
         verbose_name = 'Permiso'
@@ -98,7 +99,13 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['nombre']
 
     objects = UsuarioManager()
-
+    sucursal = models.ForeignKey(
+    'ventas.Sucursal',
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='usuarios'
+)
     class Meta:
         db_table = 'usuarios'
         verbose_name = 'Usuario'
@@ -106,6 +113,14 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.nombre} ({self.email})"
+    
+    @property
+    def nombre_rol(self):
+        # Intentamos obtener el primer rol asignado
+        rol = self.roles.first()
+        if rol:
+            return rol.nombre
+        return "Sin rol"
     
     def tiene_permiso(self, codigo_permiso):
         """Verifica si el usuario tiene un permiso específico a través de sus roles"""

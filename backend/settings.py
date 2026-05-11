@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'usuarios',
     'seguridad',
     'utils',
+    'ventas',
+    'backup',
 ]
 
 MIDDLEWARE = [
@@ -184,6 +186,7 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
 }
+DATABASE_URL = config('DATABASE_URL', default='')
 
 # CORS
 CORS_ALLOWED_ORIGINS = [

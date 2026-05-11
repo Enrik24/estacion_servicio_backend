@@ -10,8 +10,10 @@ class BitacoraViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = BitacoraSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'bitacora.ver'
+
+    
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['usuario', 'accion', 'estado']
+    filterset_fields = ['usuario_nombre', 'usuario_email', 'descripcion', 'ip_address', 'user_agent']
     ordering_fields = ['fecha_hora']
     ordering = ['-fecha_hora']
     

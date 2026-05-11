@@ -1,5 +1,5 @@
 from django.db import models
-from usuarios.models import Usuario  # ← Import relativo simple
+from usuarios.models import Usuario, Permiso  # Importar el modelo de usuario para la relación en Bitacora
 
 class Bitacora(models.Model):
     ACCIONES = [
@@ -22,19 +22,27 @@ class Bitacora(models.Model):
         null=True, 
         blank=True
     )
+
     usuario_email = models.EmailField(null=True, blank=True)
     usuario_nombre = models.CharField(max_length=150, null=True, blank=True)
+    usuario_rol = models.CharField(max_length=150, null=True, blank=True)
+    
     accion = models.CharField(max_length=20, choices=ACCIONES)
-    ip_address = models.GenericIPAddressField(null=True, blank=True)
-    user_agent = models.CharField(max_length=500, null=True, blank=True)
-    fecha_hora = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=20, choices=ESTADOS)
+    
+    modulo_afectado = models.CharField(max_length=150, null=True, blank=True)
+    descripcion = models.TextField(null=True, blank=True)
+    
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, null=True, blank=True) 
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+    
 
     class Meta:
         db_table = 'bitacora'
-        verbose_name = 'Bitácora'
-        verbose_name_plural = 'Bitácoras'
+        verbose_name = "Bitácora"
+        verbose_name_plural = "Bitácoras"
         ordering = ['-fecha_hora']
 
     def __str__(self):
-        return f"{self.accion} - {self.usuario_email} - {self.fecha_hora}"
+        return f"{self.accion} - {self.usuario_email or "Sistema"} - {self.fecha_hora.strftime('%Y-%m-%d %H:%M')}"

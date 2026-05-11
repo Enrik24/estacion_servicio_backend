@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from usuarios.models import Permiso, Rol, Usuario
+from ventas.models import Isla, Lado, TipoCombustible
 
 
 class Command(BaseCommand):
@@ -7,26 +8,57 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.NOTICE('Iniciando seed...'))
-        
-        # Crear permisos
+
         permisos_data = [
-            # Permisos de usuarios
-            {'codigo': 'usuarios.ver', 'nombre': 'Ver Usuarios', 'descripcion': 'Permiso para ver usuarios'},
-            {'codigo': 'usuarios.crear', 'nombre': 'Crear Usuarios', 'descripcion': 'Permiso para crear usuarios'},
-            {'codigo': 'usuarios.editar', 'nombre': 'Editar Usuarios', 'descripcion': 'Permiso para editar usuarios'},
-            {'codigo': 'usuarios.eliminar', 'nombre': 'Eliminar Usuarios', 'descripcion': 'Permiso para eliminar usuarios'},
-            
-            # Permisos de roles
-            {'codigo': 'roles.ver', 'nombre': 'Ver Roles', 'descripcion': 'Permiso para ver roles'},
-            {'codigo': 'roles.crear', 'nombre': 'Crear Roles', 'descripcion': 'Permiso para crear roles'},
-            {'codigo': 'roles.editar', 'nombre': 'Editar Roles', 'descripcion': 'Permiso para editar roles'},
-            {'codigo': 'roles.eliminar', 'nombre': 'Eliminar Roles', 'descripcion': 'Permiso para eliminar roles'},
-            
-            # Permisos de permisos
-            {'codigo': 'permisos.ver', 'nombre': 'Ver Permisos', 'descripcion': 'Permiso para ver permisos'},
-            {'codigo': 'permisos.crear', 'nombre': 'Crear Permisos', 'descripcion': 'Permiso para crear permisos'},
-            {'codigo': 'permisos.editar', 'nombre': 'Editar Permisos', 'descripcion': 'Permiso para editar permisos'},
-            {'codigo': 'permisos.eliminar', 'nombre': 'Eliminar Permisos', 'descripcion': 'Permiso para eliminar permisos'},
+            # Usuarios
+            {'codigo': 'usuarios.ver', 'nombre': 'Ver usuarios', 'descripcion': 'Ver lista de usuarios'},
+            {'codigo': 'usuarios.crear', 'nombre': 'Crear usuarios', 'descripcion': 'Crear nuevos usuarios'},
+            {'codigo': 'usuarios.editar', 'nombre': 'Editar usuarios', 'descripcion': 'Editar usuarios existentes'},
+            {'codigo': 'usuarios.eliminar', 'nombre': 'Eliminar usuarios', 'descripcion': 'Eliminar usuarios'},
+            {'codigo': 'usuarios.asignar_roles', 'nombre': 'Asignar roles', 'descripcion': 'Asignar roles a usuarios'},
+
+            # Roles
+            {'codigo': 'roles.ver', 'nombre': 'Ver roles', 'descripcion': 'Ver lista de roles'},
+            {'codigo': 'roles.crear', 'nombre': 'Crear roles', 'descripcion': 'Crear nuevos roles'},
+            {'codigo': 'roles.editar', 'nombre': 'Editar roles', 'descripcion': 'Editar roles existentes'},
+            {'codigo': 'roles.eliminar', 'nombre': 'Eliminar roles', 'descripcion': 'Eliminar roles'},
+
+            # Permisos
+            {'codigo': 'permisos.ver', 'nombre': 'Ver permisos', 'descripcion': 'Ver lista de permisos'},
+            {'codigo': 'permisos.crear', 'nombre': 'Crear permisos', 'descripcion': 'Crear nuevos permisos'},
+            {'codigo': 'permisos.editar', 'nombre': 'Editar permisos', 'descripcion': 'Editar permisos existentes'},
+            {'codigo': 'permisos.eliminar', 'nombre': 'Eliminar permisos', 'descripcion': 'Eliminar permisos'},
+
+            # Bitacora
+            {'codigo': 'bitacora.ver', 'nombre': 'Ver bitácora', 'descripcion': 'Ver registro de auditoría'},
+
+            # Turnos
+            {'codigo': 'turnos.ver', 'nombre': 'Ver turnos', 'descripcion': 'Ver lista de turnos'},
+            {'codigo': 'turnos.abrir', 'nombre': 'Abrir turno', 'descripcion': 'Abrir un nuevo turno'},
+            {'codigo': 'turnos.cerrar', 'nombre': 'Cerrar turno', 'descripcion': 'Cerrar un turno abierto'},
+
+            # Ventas
+            {'codigo': 'ventas.ver', 'nombre': 'Ver ventas', 'descripcion': 'Ver registro de ventas'},
+            {'codigo': 'ventas.registrar', 'nombre': 'Registrar venta', 'descripcion': 'Registrar nuevas ventas'},
+            {'codigo': 'ventas.anular', 'nombre': 'Anular venta', 'descripcion': 'Anular ventas registradas'},
+
+            # Surtidores
+            {'codigo': 'surtidores.ver', 'nombre': 'Ver surtidores', 'descripcion': 'Ver lista de surtidores'},
+            {'codigo': 'surtidores.crear', 'nombre': 'Crear surtidores', 'descripcion': 'Crear nuevos surtidores'},
+            {'codigo': 'surtidores.editar', 'nombre': 'Editar surtidores', 'descripcion': 'Editar surtidores existentes'},
+            {'codigo': 'surtidores.eliminar', 'nombre': 'Eliminar surtidores', 'descripcion': 'Eliminar surtidores'},
+
+            # Clientes
+            {'codigo': 'clientes.ver', 'nombre': 'Ver clientes', 'descripcion': 'Ver lista de clientes'},
+            {'codigo': 'clientes.crear', 'nombre': 'Crear clientes', 'descripcion': 'Crear nuevos clientes'},
+            {'codigo': 'clientes.editar', 'nombre': 'Editar clientes', 'descripcion': 'Editar clientes existentes'},
+            {'codigo': 'clientes.eliminar', 'nombre': 'Eliminar clientes', 'descripcion': 'Eliminar clientes'},
+
+            # Sucursales
+            {'codigo': 'sucursales.ver', 'nombre': 'Ver sucursales', 'descripcion': 'Ver lista de sucursales'},
+            {'codigo': 'sucursales.crear', 'nombre': 'Crear sucursales', 'descripcion': 'Crear nuevas sucursales'},
+            {'codigo': 'sucursales.editar', 'nombre': 'Editar sucursales', 'descripcion': 'Editar sucursales existentes'},
+            {'codigo': 'sucursales.eliminar', 'nombre': 'Eliminar sucursales', 'descripcion': 'Eliminar sucursales'},
             
             # Permisos de facturas
             {'codigo': 'ver.facturas', 'nombre': 'Ver Facturas', 'descripcion': 'Permiso para poder ver sus facturas'},
@@ -43,20 +75,9 @@ class Command(BaseCommand):
             {'codigo': 'combustibles.editar', 'nombre': 'Editar Combustibles', 'descripcion': 'Permiso para editar tipos de combustible'},
             {'codigo': 'combustibles.eliminar', 'nombre': 'Eliminar Combustibles', 'descripcion': 'Permiso para eliminar tipos de combustible'},
             
-            # Permisos de ventas
-            {'codigo': 'ventas.ver', 'nombre': 'Ver Ventas', 'descripcion': 'Permiso para ver ventas'},
-            {'codigo': 'ventas.crear', 'nombre': 'Crear Ventas', 'descripcion': 'Permiso para crear ventas'},
-            {'codigo': 'ventas.editar', 'nombre': 'Editar Ventas', 'descripcion': 'Permiso para editar ventas'},
-            {'codigo': 'ventas.eliminar', 'nombre': 'Eliminar Ventas', 'descripcion': 'Permiso para eliminar ventas'},
-            
+          
             # Permisos de reportes
             {'codigo': 'reportes.ver', 'nombre': 'Ver Reportes', 'descripcion': 'Permiso para ver reportes de la gasolinera'},
-
-            # Permisos de clientes
-            {'codigo': 'clientes.ver', 'nombre': 'Ver Clientes', 'descripcion': 'Permiso para ver clientes'},
-            {'codigo': 'clientes.crear', 'nombre': 'Crear Clientes', 'descripcion': 'Permiso para crear clientes'},
-            {'codigo': 'clientes.editar', 'nombre': 'Editar Clientes', 'descripcion': 'Permiso para editar clientes'},
-            {'codigo': 'clientes.eliminar', 'nombre': 'Eliminar Clientes', 'descripcion': 'Permiso para desactivar clientes'},
 
             # Permisos de límites de consumo
             {'codigo': 'limites_consumo.ver', 'nombre': 'Ver Límites de Consumo', 'descripcion': 'Permiso para ver límites de consumo'},
@@ -65,7 +86,7 @@ class Command(BaseCommand):
             {'codigo': 'limites_consumo.eliminar', 'nombre': 'Eliminar Límites de Consumo', 'descripcion': 'Permiso para eliminar límites de consumo'},
             {'codigo': 'limites_consumo.validar', 'nombre': 'Validar Consumo', 'descripcion': 'Permiso para validar consumos contra límites'},
         ]
-        
+
         permisos_creados = {}
         for permiso_data in permisos_data:
             permiso, created = Permiso.objects.get_or_create(
@@ -77,39 +98,76 @@ class Command(BaseCommand):
             )
             permisos_creados[permiso_data['codigo']] = permiso
             if created:
-                self.stdout.write(self.style.SUCCESS(f'Permiso creado: {permiso.nombre}'))
+                self.stdout.write(self.style.SUCCESS(f'  Permiso creado: {permiso.codigo}'))
             else:
-                self.stdout.write(f'Permiso ya existe: {permiso.nombre}')
-        
-        # Crear roles
+                self.stdout.write(f'  Permiso ya existe: {permiso.codigo}')
+
+        # Roles
+        todos_los_permisos = list(permisos_creados.values())
+
+        permisos_operador = [
+            permisos_creados.get('turnos.ver'),
+            permisos_creados.get('turnos.abrir'),
+            permisos_creados.get('turnos.cerrar'),
+            permisos_creados.get('ventas.ver'),
+            permisos_creados.get('ventas.registrar'),
+            permisos_creados.get('ventas.anular'),
+            permisos_creados.get('surtidores.ver'),
+            permisos_creados.get('clientes.ver'),
+        ]
+
+        permisos_gerente = [
+            permisos_creados.get('usuarios.ver'),
+            permisos_creados.get('roles.ver'),
+            permisos_creados.get('permisos.ver'),
+            permisos_creados.get('bitacora.ver'),
+            permisos_creados.get('turnos.ver'),
+            permisos_creados.get('ventas.ver'),
+            permisos_creados.get('surtidores.ver'),
+            permisos_creados.get('clientes.ver'),
+            permisos_creados.get('sucursales.ver'),
+        ]
+
+        permisos_auditor = [
+            permisos_creados.get('bitacora.ver'),
+            permisos_creados.get('ventas.ver'),
+            permisos_creados.get('usuarios.ver'),
+            permisos_creados.get('turnos.ver'),
+        ]
+
+        permisos_cliente = [
+            permisos_creados.get('ventas.ver'),
+            permisos_creados.get('clientes.ver'),
+        ]
+
         roles_data = [
             {
                 'nombre': 'Administrador',
-                'descripcion': 'Rol con acceso total al sistema',
-                'permisos': list(permisos_creados.values())  # Todos los permisos
+                'descripcion': 'Acceso total al sistema',
+                'permisos': todos_los_permisos
+            },
+            {
+                'nombre': 'Gerente',
+                'descripcion': 'Acceso a reportes y configuración',
+                'permisos': permisos_gerente
+            },
+            {
+                'nombre': 'Operador',
+                'descripcion': 'Registro de ventas y turnos',
+                'permisos': permisos_operador
+            },
+            {
+                'nombre': 'Auditor',
+                'descripcion': 'Solo lectura y bitácora',
+                'permisos': permisos_auditor
             },
             {
                 'nombre': 'Cliente',
-                'descripcion': 'Rol para clientes de la gasolinera',
-                'permisos': [
-                    permisos_creados.get('ver.facturas'),
-                    permisos_creados.get('ventas.ver'),
-                ]
-            },
-            {
-                'nombre': 'Empleado',
-                'descripcion': 'Rol para empleados de la gasolinera',
-                'permisos': [
-                    permisos_creados.get('bombas.ver'),
-                    permisos_creados.get('combustibles.ver'),
-                    permisos_creados.get('ventas.ver'),
-                    permisos_creados.get('ventas.crear'),
-                    permisos_creados.get('ventas.editar'),
-                    permisos_creados.get('ver.facturas'),
-                ]
+                'descripcion': 'Cliente de la estación de servicio',
+                'permisos': permisos_cliente
             },
         ]
-        
+
         roles_creados = {}
         for rol_data in roles_data:
             rol, created = Rol.objects.get_or_create(
@@ -117,51 +175,39 @@ class Command(BaseCommand):
                 defaults={'descripcion': rol_data['descripcion']}
             )
             if created:
-                self.stdout.write(self.style.SUCCESS(f'Rol creado: {rol.nombre}'))
+                self.stdout.write(self.style.SUCCESS(f'  Rol creado: {rol.nombre}'))
             else:
-                self.stdout.write(f'Rol ya existe: {rol.nombre}')
-            
-            # Asignar permisos al rol
-            if rol_data['permisos']:
-                permisos_validos = [p for p in rol_data['permisos'] if p is not None]
-                rol.permisos.set(permisos_validos)
-                self.stdout.write(f'  -> Permisos asignados: {len(permisos_validos)}')
-            
+                self.stdout.write(f'  Rol ya existe: {rol.nombre}')
+
+            permisos_validos = [p for p in rol_data['permisos'] if p is not None]
+            rol.permisos.set(permisos_validos)
             roles_creados[rol_data['nombre']] = rol
-        
-        # Crear usuarios
+
+        # Usuarios base
         usuarios_data = [
             {
-                'nombre': 'admin',
-                'email': 'admin@gmail.com',
+                'nombre': 'Administrador',
+                'email': 'admin@estacion.com',
                 'password': 'admin123',
                 'is_superuser': True,
                 'is_staff': True,
                 'rol': 'Administrador'
             },
             {
-                'nombre': 'Juan Cliente',
-                'email': 'juan.cliente@gmail.com',
-                'password': 'cliente123',
+                'nombre': 'Operador Demo',
+                'email': 'operador@estacion.com',
+                'password': 'operador123',
                 'is_superuser': False,
                 'is_staff': False,
-                'rol': 'Cliente'
-            },
-            {
-                'nombre': 'Maria Empleada',
-                'email': 'maria.empleada@gmail.com',
-                'password': 'empleado123',
-                'is_superuser': False,
-                'is_staff': True,
-                'rol': 'Empleado'
+                'rol': 'Operador'
             },
         ]
-        
+
         for usuario_data in usuarios_data:
             email = usuario_data['email']
             rol_nombre = usuario_data.pop('rol')
             password = usuario_data.pop('password')
-            
+
             usuario, created = Usuario.objects.get_or_create(
                 email=email,
                 defaults={
@@ -171,18 +217,64 @@ class Command(BaseCommand):
                     'is_active': True
                 }
             )
-            
+
             if created:
                 usuario.set_password(password)
                 usuario.save()
-                self.stdout.write(self.style.SUCCESS(f'Usuario creado: {usuario.nombre} ({email})'))
+                self.stdout.write(self.style.SUCCESS(f'  Usuario creado: {usuario.nombre} ({email})'))
             else:
-                self.stdout.write(f'Usuario ya existe: {usuario.nombre} ({email})')
-            
-            # Asignar rol
+                self.stdout.write(f'  Usuario ya existe: {usuario.nombre} ({email})')
+
             rol = roles_creados.get(rol_nombre)
             if rol:
                 usuario.roles.set([rol])
-                self.stdout.write(f'  -> Rol asignado: {rol_nombre}')
-        
+
         self.stdout.write(self.style.SUCCESS('\nSeed completado exitosamente!'))
+        self.stdout.write(self.style.NOTICE('Credenciales:'))
+        self.stdout.write('  Admin:    admin@estacion.com / admin123')
+        self.stdout.write('  Operador: operador@estacion.com / operador123')
+
+        islas_data = [
+            {'numero': 1, 'descripcion': 'Isla 1'},
+            {'numero': 2, 'descripcion': 'Isla 2'},
+         ]
+
+        for isla_data in islas_data:
+            isla, created = Isla.objects.get_or_create(
+                numero=isla_data['numero'],
+                defaults={'descripcion': isla_data['descripcion'], 'estado': 'ACTIVO'}
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Isla creada: Isla {isla.numero}'))
+            else:
+                self.stdout.write(f'  Isla ya existe: Isla {isla.numero}')
+
+            # Crear lados A y B para cada isla
+            for lado in ['A', 'B']:
+                l, created = Lado.objects.get_or_create(
+                    isla=isla,
+                    lado=lado,
+                    defaults={'activo': True}
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f'    Lado creado: Isla {isla.numero} - Lado {lado}'))
+                else:
+                    self.stdout.write(f'    Lado ya existe: Isla {isla.numero} - Lado {lado}')
+
+        # Crear tipos de combustible
+        tipos_data = [
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
+            {'tipo': 'GASOLINA_PREMIUM', 'precio_litro': 11.00},
+            {'tipo': 'DIESEL', 'precio_litro': 9.80},
+            {'tipo': 'GNV', 'precio_litro': 2.73},
+        ]
+
+        for tipo_data in tipos_data:
+            tipo, created = TipoCombustible.objects.get_or_create(
+                tipo=tipo_data['tipo'],
+                defaults={'precio_litro': tipo_data['precio_litro'], 'activo': True}
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {tipo.get_tipo_display()}'))
+            else:
+                self.stdout.write(f'  Combustible ya existe: {tipo.get_tipo_display()}')

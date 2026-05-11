@@ -32,7 +32,7 @@ def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None):
 
 # CRUD USUARIOS
 class UsuarioViewSet(viewsets.ModelViewSet):
-    queryset = Usuario.objects.all()
+    queryset = Usuario.objects.all().order_by('id')
     serializer_class = UsuarioSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'usuarios.ver'
@@ -57,8 +57,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             usuario_email=request.user.email,
             usuario_nombre=request.user.nombre,
+            usuario_rol=request.user.nombre_rol,
             accion='ELIMINAR',
             estado='EXITO',
+            modulo_afectado='Administración y Seguridad',
+            descripcion='Eliminó al usuario: {instance.email}',
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )
@@ -93,8 +96,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 usuario=user,
                 usuario_email=user.email,
                 usuario_nombre=user.nombre,
+                usuario_rol=user.nombre_rol,
                 accion='EDITAR',
                 estado='EXITO',
+                modulo_afectado='Administración y Seguridad',
+                descripcion='Actualizó su contraseña exitosamente',
                 ip_address=getattr(request, 'ip_address', None),
                 user_agent=getattr(request, 'user_agent', '')[:500]
             )
@@ -104,7 +110,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
 # CRUD ROLES
 class RolViewSet(viewsets.ModelViewSet):
-    queryset = Rol.objects.prefetch_related('permisos')
+    queryset = Rol.objects.prefetch_related('permisos').order_by('id')
     serializer_class = RolSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'roles.ver'
@@ -127,7 +133,7 @@ class RolViewSet(viewsets.ModelViewSet):
 
 # CRUD PERMISOS
 class PermisoViewSet(viewsets.ModelViewSet):
-    queryset = Permiso.objects.all()
+    queryset = Permiso.objects.all().order_by('id')
     serializer_class = PermisoSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'permisos.ver'
@@ -281,15 +287,19 @@ def login_view(request):
         email = email.strip().lower()
     
     user = authenticate(request, username=email, password=password)
-    
+    rol_obj = user.roles.first()
+    nombres_del_rol = rol_obj.nombre if rol_obj else "Sin rol"
     if user:
         if not user.is_active:
             Bitacora.objects.create(
                 usuario=user,
                 usuario_email=user.email,
                 usuario_nombre=user.nombre,
+                usuario_rol=nombres_del_rol,
                 accion='LOGIN',
                 estado='ERROR',
+                modulo_afectado='Administración y Seguridad',
+                descripcion='Intento de inicio de sesión fallido',
                 ip_address=getattr(request, 'ip_address', None),
                 user_agent=getattr(request, 'user_agent', '')[:500]
             )
@@ -301,8 +311,11 @@ def login_view(request):
             usuario=user,
             usuario_email=user.email,
             usuario_nombre=user.nombre,
+            usuario_rol=user.nombre_rol,
             accion='LOGIN',
             estado='EXITO',
+            modulo_afectado='Administración y Seguridad',
+            descripcion='Inicio de sesión exitoso',
             ip_address=getattr(request, 'ip_address', None),
             user_agent=getattr(request, 'user_agent', '')[:500]
         )
@@ -331,8 +344,11 @@ def login_view(request):
         usuario=None,
         usuario_email=email,
         usuario_nombre='Intento fallido',
+        usuario_rol='Sin rol',
         accion='LOGIN',
         estado='ERROR',
+        modulo_afectado='Administración y Seguridad',
+        descripcion='Intento de inicio de sesión fallido',
         ip_address=getattr(request, 'ip_address', None),
         user_agent=getattr(request, 'user_agent', '')[:500]
     )
@@ -346,8 +362,11 @@ def logout_view(request):
         usuario=request.user,
         usuario_email=request.user.email,
         usuario_nombre=request.user.nombre,
+        usuario_rol=request.user.nombre_rol,
         accion='LOGOUT',
         estado='EXITO',
+        modulo_afectado='Administración y Seguridad',
+        descripcion='Cierre de sesión exitoso',
         ip_address=getattr(request, 'ip_address', None),
         user_agent=getattr(request, 'user_agent', '')[:500]
     )
@@ -363,6 +382,21 @@ def asignar_roles(request, pk):
     
     roles_ids = request.data.get('roles', [])
     usuario.roles.set(roles_ids)
+
+    roles_nombres = ", ".join([r.nombre for r in usuario.roles.all()])
+    
+    Bitacora.objects.create(
+        usuario=request.user,
+        usuario_email=request.user.email,
+        usuario_nombre=request.user.nombre,
+        usuario_rol=request.user.nombre_rol,
+        accion='EDITAR',
+        estado='EXITO',
+        modulo_afectado='Administración y Seguridad',
+        descripcion=f'Asignó el rol de "{roles_nombres}" al usuario {usuario.email}',
+        ip_address=getattr(request, 'ip_address', None),
+        user_agent=getattr(request, 'user_agent', '')[:500]
+    )
     
     return Response({'mensaje': 'Roles asignados correctamente'})
 

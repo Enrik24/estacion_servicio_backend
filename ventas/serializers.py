@@ -6,7 +6,7 @@ und realizar validaciones en las operaciones CRUD de venta, clientes, turnos e i
 
 from rest_framework import serializers
 from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta,Vehiculo
-from django.db.models import Sum
+from django.db.models import Sum, Case, When, DecimalField
 
 
 class IslaSerializer(serializers.ModelSerializer):
@@ -217,6 +217,10 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
     diferencia = serializers.SerializerMethodField()
     # Cantidad total de facturas/ventas completadas en el turno
     total_facturas = serializers.SerializerMethodField()
+    # Desglose de ventas por método de pago (Efectivo, Tarjeta, QR, Fleet)
+    metodos_pago = serializers.SerializerMethodField()
+    # Desglose de ventas por tipo de combustible (Gasolina Especial, Premium, Diésel, GNV)
+    tipos_combustible = serializers.SerializerMethodField()
 
     class Meta:
         model = Turno
@@ -233,7 +237,9 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
             'ubicacion', 
             'monto_sistema',
             'diferencia',
-            'total_facturas'
+            'total_facturas',
+            'metodos_pago',
+            'tipos_combustible'
         ]
     
     def get_ubicacion(self, obj):
@@ -320,4 +326,97 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
             int: Cantidad de facturas completadas
         """
         return obj.ventas.filter(estado='COMPLETADA').count()
+
+    def get_metodos_pago(self, obj):
+        """Retorna el desglose de ventas agrupadas por método de pago.
+        
+        LÓGICA: Suma el total de todas las ventas completadas, agrupadas por
+        cada método de pago disponible (EFECTIVO, TARJETA, QR, CREDITO_FLEET).
+        
+        USO: Proporciona información sobre cuál fue el monto recaudado por cada
+        método de pago durante el turno.
+        
+        Returns:
+            dict: Diccionario con claves como 'efectivo', 'tarjeta', 'qr', 'credito_fleet'
+                  y valores como Decimal con el total de ventas por ese método.
+                  Ejemplo: {'efectivo': Decimal('1000.00'), 'tarjeta': Decimal('500.00'), ...}
+        """
+        # Obtener todas las ventas completadas del turno
+        ventas = obj.ventas.filter(estado='COMPLETADA')
+        
+        # Inicializar diccionario con métodos de pago
+        resultado = {
+            'efectivo': 0,
+            'tarjeta': 0,
+            'qr': 0,
+            'credito_fleet': 0
+        }
+        
+        # Iterar sobre las ventas y sumar por método de pago
+        for venta in ventas:
+            metodo = venta.metodo_pago.lower()
+            if metodo == 'efectivo':
+                resultado['efectivo'] += float(venta.total)
+            elif metodo == 'tarjeta':
+                resultado['tarjeta'] += float(venta.total)
+            elif metodo == 'qr':
+                resultado['qr'] += float(venta.total)
+            elif metodo == 'credito_fleet':
+                resultado['credito_fleet'] += float(venta.total)
+        
+        # Convertir a Decimal con 2 decimales para precisión en dinero
+        return {
+            'efectivo': round(resultado['efectivo'], 2),
+            'tarjeta': round(resultado['tarjeta'], 2),
+            'qr': round(resultado['qr'], 2),
+            'credito_fleet': round(resultado['credito_fleet'], 2)
+        }
+
+    def get_tipos_combustible(self, obj):
+        """Retorna el desglose de ventas agrupadas por tipo de combustible.
+        
+        LÓGICA: Suma el total de todas las ventas completadas, agrupadas por
+        cada tipo de combustible disponible (GASOLINA_ESPECIAL, GASOLINA_PREMIUM,
+        DIESEL, GNV).
+        
+        USO: Proporciona información sobre cuál fue el monto de ventas por cada
+        tipo de combustible durante el turno, útil para análisis de inventario
+        y demanda de productos.
+        
+        Returns:
+            dict: Diccionario con claves como 'gasolina_especial', 'gasolina_premium',
+                  'diesel', 'gnv' y valores como Decimal con el total de ventas 
+                  por ese tipo.
+                  Ejemplo: {'gasolina_especial': Decimal('2000.00'), ...}
+        """
+        # Obtener todas las ventas completadas del turno
+        ventas = obj.ventas.filter(estado='COMPLETADA')
+        
+        # Inicializar diccionario con tipos de combustible
+        resultado = {
+            'gasolina_especial': 0,
+            'gasolina_premium': 0,
+            'diesel': 0,
+            'gnv': 0
+        }
+        
+        # Iterar sobre las ventas y sumar por tipo de combustible
+        for venta in ventas:
+            tipo = venta.tipo_combustible.tipo.lower()
+            if tipo == 'gasolina_especial':
+                resultado['gasolina_especial'] += float(venta.total)
+            elif tipo == 'gasolina_premium':
+                resultado['gasolina_premium'] += float(venta.total)
+            elif tipo == 'diesel':
+                resultado['diesel'] += float(venta.total)
+            elif tipo == 'gnv':
+                resultado['gnv'] += float(venta.total)
+        
+        # Convertir a Decimal con 2 decimales para precisión en dinero
+        return {
+            'gasolina_especial': round(resultado['gasolina_especial'], 2),
+            'gasolina_premium': round(resultado['gasolina_premium'], 2),
+            'diesel': round(resultado['diesel'], 2),
+            'gnv': round(resultado['gnv'], 2)
+        }
         

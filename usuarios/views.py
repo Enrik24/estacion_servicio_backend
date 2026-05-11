@@ -1,3 +1,5 @@
+from django.utils import timezone
+from django.db import models
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -6,13 +8,27 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Usuario, Rol, Permiso
+from .models import Usuario, Rol, Permiso, LimiteConsumo
 from .serializers import (
-    UsuarioSerializer, UsuarioMeSerializer, RolSerializer, 
-    PermisoSerializer, CambiarPasswordSerializer
+    UsuarioSerializer, UsuarioMeSerializer, RolSerializer,
+    PermisoSerializer, CambiarPasswordSerializer, LimiteConsumoSerializer,
+    ValidarConsumoSerializer
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora  # ← Importado de seguridad
+
+
+def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None):
+    usuario_log = request.user if request.user.is_authenticated else None
+    Bitacora.objects.create(
+        usuario=usuario_log,
+        usuario_email=getattr(usuario_log, 'email', None),
+        usuario_nombre=getattr(usuario_log, 'nombre', None),
+        accion=accion,
+        estado=estado,
+        ip_address=getattr(request, 'ip_address', None),
+        user_agent=getattr(request, 'user_agent', '')[:500]
+    )
 
 # CRUD USUARIOS
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -130,6 +146,134 @@ class PermisoViewSet(viewsets.ModelViewSet):
         elif self.action == 'destroy':
             return [IsAuthenticated(), HasPermiso(permiso='permisos.eliminar')]
         return super().get_permissions()
+
+
+class ClienteViewSet(viewsets.ModelViewSet):
+    serializer_class = UsuarioSerializer
+    permission_classes = [IsAuthenticated, HasPermiso]
+    permiso_requerido = 'clientes.ver'
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = Usuario.objects.filter(roles__nombre__iexact='Cliente').distinct().prefetch_related('roles')
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(models.Q(nombre__icontains=search) | models.Q(email__icontains=search))
+        return queryset
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated(), HasPermiso(permiso='clientes.crear')]
+        elif self.action in ['update', 'partial_update']:
+            return [IsAuthenticated(), HasPermiso(permiso='clientes.editar')]
+        elif self.action == 'destroy':
+            return [IsAuthenticated(), HasPermiso(permiso='clientes.eliminar')]
+        return super().get_permissions()
+
+    def _obtener_rol_cliente(self):
+        rol_cliente = Rol.objects.filter(nombre__iexact='Cliente').first()
+        if not rol_cliente:
+            raise ValueError("No existe el rol 'Cliente'. Ejecuta el seed inicial.")
+        return rol_cliente
+
+    def perform_create(self, serializer):
+        usuario = serializer.save()
+        usuario.roles.set([self._obtener_rol_cliente()])
+        registrar_bitacora(self.request, accion='CREAR')
+
+    def perform_update(self, serializer):
+        usuario = serializer.save()
+        usuario.roles.set([self._obtener_rol_cliente()])
+        registrar_bitacora(self.request, accion='EDITAR')
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
+        registrar_bitacora(self.request, accion='ELIMINAR')
+
+
+class LimiteConsumoViewSet(viewsets.ModelViewSet):
+    queryset = LimiteConsumo.objects.select_related('cliente').all()
+    serializer_class = LimiteConsumoSerializer
+    permission_classes = [IsAuthenticated, HasPermiso]
+    permiso_requerido = 'limites_consumo.ver'
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['cliente', 'tipo', 'unidad', 'is_active']
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated(), HasPermiso(permiso='limites_consumo.crear')]
+        elif self.action in ['update', 'partial_update']:
+            return [IsAuthenticated(), HasPermiso(permiso='limites_consumo.editar')]
+        elif self.action == 'destroy':
+            return [IsAuthenticated(), HasPermiso(permiso='limites_consumo.eliminar')]
+        elif self.action == 'validar_consumo':
+            return [IsAuthenticated(), HasPermiso(permiso='limites_consumo.validar')]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                models.Q(cliente__nombre__icontains=search)
+                | models.Q(cliente__email__icontains=search)
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save()
+        registrar_bitacora(self.request, accion='CREAR')
+
+    def perform_update(self, serializer):
+        serializer.save()
+        registrar_bitacora(self.request, accion='EDITAR')
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        registrar_bitacora(self.request, accion='ELIMINAR')
+
+    @action(detail=False, methods=['post'])
+    def validar_consumo(self, request):
+        serializer = ValidarConsumoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        cliente_id = data['cliente_id']
+        unidad = data['unidad']
+        valor_consumo = data['valor_consumo']
+        fecha = data['fecha']
+        tipo = data.get('tipo')
+
+        limites = LimiteConsumo.objects.filter(
+            cliente_id=cliente_id,
+            unidad=unidad,
+            is_active=True,
+        ).filter(
+            models.Q(fecha_inicio__isnull=True) | models.Q(fecha_inicio__lte=fecha),
+            models.Q(fecha_fin__isnull=True) | models.Q(fecha_fin__gte=fecha),
+        )
+        if tipo:
+            limites = limites.filter(tipo=tipo)
+
+        for limite in limites:
+            if valor_consumo > limite.valor:
+                registrar_bitacora(request, accion='EDITAR', estado='ERROR')
+                return Response(
+                    {
+                        'permitido': False,
+                        'mensaje': (
+                            f"Consumo rechazado: excede el límite {limite.tipo.lower()} "
+                            f"({limite.valor} {limite.unidad.lower()})."
+                        ),
+                        'limite_id': limite.id,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        registrar_bitacora(request, accion='EDITAR', estado='EXITO')
+        return Response({'permitido': True, 'mensaje': 'Consumo dentro de los límites configurados.'})
 
 # LOGIN/LOGOUT
 @api_view(['POST'])

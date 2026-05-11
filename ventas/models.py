@@ -51,6 +51,7 @@ class Sucursal(models.Model):
 
     def __str__(self):
         return self.nombre
+
 class Isla(models.Model):
     ESTADOS = [
         ('ACTIVO', 'Activo'),
@@ -80,7 +81,6 @@ class Isla(models.Model):
     def __str__(self):
         return f"Isla {self.numero}"
 
-
 class Lado(models.Model):
     LADOS = [
         ('A', 'Lado A'),
@@ -101,7 +101,6 @@ class Lado(models.Model):
 
     def __str__(self):
         return f"Isla {self.isla.numero} - Lado {self.lado}"
-
 
 class Turno(models.Model):
     ESTADOS = [
@@ -125,6 +124,14 @@ class Turno(models.Model):
     monto_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     monto_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     observaciones = models.TextField(blank=True, null=True)
+    consolidado = models.BooleanField(default=False)
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='turnos',
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -134,7 +141,6 @@ class Turno(models.Model):
 
     def __str__(self):
         return f"Turno {self.id} - {self.operador.nombre} - Isla {self.isla.numero}"
-
 
 class Cliente(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -207,3 +213,5 @@ class Venta(models.Model):
 
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
+    
+

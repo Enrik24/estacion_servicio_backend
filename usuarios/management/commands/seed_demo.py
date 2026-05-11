@@ -12,7 +12,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('Iniciando seed_demo...')
         
-        from ventas.models import Cliente, Vehiculo, Turno, Venta, Isla, Lado, TipoCombustible
+        from ventas.models import Cliente, Vehiculo, Turno, Venta, Isla, Lado, TipoCombustible, Sucursal
         from usuarios.models import Usuario
 
         # ── DATOS DE EJEMPLO ──────────────────────────────────────────

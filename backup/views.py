@@ -107,6 +107,8 @@ def restaurar_backup(request):
     if 'error' in line.lower() 
     and 'event trigger' not in line.lower()
     and 'already exists' not in line.lower()
+    and 'duplicate key' not in line.lower()
+    and 'multiple primary keys' not in line.lower()
     and line.strip() != ''
 ]
 

@@ -1,7 +1,10 @@
+import random
+import uuid
+from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from usuarios.models import Permiso, Rol, Usuario
-from ventas.models import Isla, Lado, TipoCombustible, Sucursal, Cliente, Turno, Venta
+from ventas.models import Isla, Lado, TipoCombustible, Sucursal, Cliente, Vehiculo, Turno, Venta
 
 
 class Command(BaseCommand):
@@ -61,9 +64,32 @@ class Command(BaseCommand):
             {'codigo': 'sucursales.crear',    'nombre': 'Crear sucursales',    'descripcion': 'Crear nuevas sucursales'},
             {'codigo': 'sucursales.editar',   'nombre': 'Editar sucursales',   'descripcion': 'Editar sucursales existentes'},
             {'codigo': 'sucursales.eliminar', 'nombre': 'Eliminar sucursales', 'descripcion': 'Eliminar sucursales'},
+            
+            # Permisos de facturas
+            {'codigo': 'ver.facturas', 'nombre': 'Ver Facturas', 'descripcion': 'Permiso para poder ver sus facturas'},
+            
+            # Permisos de bombas (gasolinera)
+            {'codigo': 'bombas.ver', 'nombre': 'Ver Bombas', 'descripcion': 'Permiso para ver bombas de combustible'},
+            {'codigo': 'bombas.crear', 'nombre': 'Crear Bombas', 'descripcion': 'Permiso para crear bombas de combustible'},
+            {'codigo': 'bombas.editar', 'nombre': 'Editar Bombas', 'descripcion': 'Permiso para editar bombas de combustible'},
+            {'codigo': 'bombas.eliminar', 'nombre': 'Eliminar Bombas', 'descripcion': 'Permiso para eliminar bombas de combustible'},
+            
+            # Permisos de combustibles
+            {'codigo': 'combustibles.ver', 'nombre': 'Ver Combustibles', 'descripcion': 'Permiso para ver tipos de combustible'},
+            {'codigo': 'combustibles.crear', 'nombre': 'Crear Combustibles', 'descripcion': 'Permiso para crear tipos de combustible'},
+            {'codigo': 'combustibles.editar', 'nombre': 'Editar Combustibles', 'descripcion': 'Permiso para editar tipos de combustible'},
+            {'codigo': 'combustibles.eliminar', 'nombre': 'Eliminar Combustibles', 'descripcion': 'Permiso para eliminar tipos de combustible'},
+            
+          
+            # Permisos de reportes
+            {'codigo': 'reportes.ver', 'nombre': 'Ver Reportes', 'descripcion': 'Permiso para ver reportes de la gasolinera'},
 
-            # Reportes
-            {'codigo': 'reportes.ver', 'nombre': 'Ver reportes', 'descripcion': 'Acceder a los reportes del sistema'},
+            # Permisos de límites de consumo
+            {'codigo': 'limites_consumo.ver', 'nombre': 'Ver Límites de Consumo', 'descripcion': 'Permiso para ver límites de consumo'},
+            {'codigo': 'limites_consumo.crear', 'nombre': 'Crear Límites de Consumo', 'descripcion': 'Permiso para crear límites de consumo'},
+            {'codigo': 'limites_consumo.editar', 'nombre': 'Editar Límites de Consumo', 'descripcion': 'Permiso para editar límites de consumo'},
+            {'codigo': 'limites_consumo.eliminar', 'nombre': 'Eliminar Límites de Consumo', 'descripcion': 'Permiso para eliminar límites de consumo'},
+            {'codigo': 'limites_consumo.validar', 'nombre': 'Validar Consumo', 'descripcion': 'Permiso para validar consumos contra límites'},
         ]
 
         permisos_creados = {}
@@ -390,166 +416,174 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f'  Combustible ya existe: {tipo.get_tipo_display()}')
 
-        # ── Clientes ──────────────────────────────────────────────────────────
-        clientes_data = [
-            {
-                'nombre': 'Juan Pérez',
-                'nit': '12345678',
-                'email': 'juan.perez@gmail.com',
-                'telefono': '71234567',
-                'limite_credito': 500.00,
-                'saldo_credito': 0.00,
-                'activo': True,
-            },
-            {
-                'nombre': 'María López',
-                'nit': '87654321',
-                'email': 'maria.lopez@gmail.com',
-                'telefono': '76543210',
-                'limite_credito': 1000.00,
-                'saldo_credito': 0.00,
-                'activo': True,
-            },
-            {
-                'nombre': 'Transportes Andes S.R.L.',
-                'nit': '55566677',
-                'email': 'contacto@transandes.com',
-                'telefono': '44556677',
-                'limite_credito': 5000.00,
-                'saldo_credito': 0.00,
-                'activo': True,
-            },
+        # ── Clientes y Vehículos ──────────────────────────────────────────────
+        nombres_clientes = [
+            'Carlos Mamani', 'Ana Flores', 'Luis Quispe', 'Maria Condori',
+            'Jorge Vargas', 'Rosa Huanca', 'Pedro Gutierrez', 'Elena Soria',
+            'Miguel Apaza', 'Carmen Choque', 'Roberto Limachi', 'Patricia Mamani',
+            'Fernando Ticona', 'Lucia Callisaya', 'Oscar Zenteno', 'Silvia Quispe',
+            'Raul Mamani', 'Gloria Poma', 'Ivan Condori', 'Teresa Flores',
+            'Hugo Tarqui', 'Beatriz Laime', 'Nelson Cusi', 'Yolanda Marca',
+            'Alvaro Pinto',
         ]
 
+        placas = [
+            '1234-ABC', '5678-DEF', '9012-GHI', '3456-JKL', '7890-MNO',
+            '2345-PQR', '6789-STU', '0123-VWX', '4567-YZA', '8901-BCD',
+            '1357-EFG', '2468-HIJ', '3579-KLM', '4680-NOP', '5791-QRS',
+            '6802-TUV', '7913-WXY', '8024-ZAB', '9135-CDE', '0246-FGH',
+            '1122-IJK', '3344-LMN', '5566-OPQ', '7788-RST', '9900-UVW',
+        ]
+
+        marcas_modelos = [
+            ('Toyota', 'Corolla'), ('Toyota', 'Hilux'), ('Toyota', 'RAV4'),
+            ('Chevrolet', 'Sail'), ('Chevrolet', 'Spark'), ('Nissan', 'Frontier'),
+            ('Hyundai', 'Tucson'), ('Kia', 'Sportage'), ('Suzuki', 'Swift'),
+            ('Ford', 'Ranger'), ('Honda', 'Civic'), ('Mitsubishi', 'L200'),
+        ]
+
+        colores = ['Blanco', 'Negro', 'Gris', 'Rojo', 'Azul', 'Plata', 'Verde']
+
+        self.stdout.write(self.style.NOTICE('  Creando clientes y vehículos...'))
         clientes_creados = []
-        for cli_data in clientes_data:
+
+        for i, nombre in enumerate(nombres_clientes):
             cli, created = Cliente.objects.get_or_create(
-                nit=cli_data['nit'],
-                defaults=cli_data
+                nombre=nombre,
+                defaults={
+                    'nit': f'{random.randint(1000000, 9999999)}',
+                    'telefono': f'7{random.randint(1000000, 9999999)}',
+                    'limite_credito': random.choice([0, 500, 1000, 2000]),
+                    'saldo_credito': random.choice([0, 200, 500, 1000]),
+                    'activo': True,
+                }
             )
-            clientes_creados.append(cli)
             if created:
-                self.stdout.write(self.style.SUCCESS(f'  Cliente creado: {cli.nombre}'))
+                self.stdout.write(self.style.SUCCESS(f'  Cliente creado: {nombre}'))
             else:
-                self.stdout.write(f'  Cliente ya existe: {cli.nombre}')
+                self.stdout.write(f'  Cliente ya existe: {nombre}')
 
-        # ── Turnos ────────────────────────────────────────────────────────────
+            marca, modelo = random.choice(marcas_modelos)
+            v, v_created = Vehiculo.objects.get_or_create(
+                placa=placas[i],
+                defaults={
+                    'cliente': cli,
+                    'marca': marca,
+                    'modelo': modelo,
+                    'color': random.choice(colores),
+                    'activo': True,
+                }
+            )
+            if v_created:
+                self.stdout.write(self.style.SUCCESS(f'    Vehículo creado: {placas[i]}'))
+            else:
+                self.stdout.write(f'    Vehículo ya existe: {placas[i]}')
+
+            clientes_creados.append(cli)
+
+        # ── Turnos y Ventas (últimos 30 días) ─────────────────────────────────
+        self.stdout.write(self.style.NOTICE('  Creando turnos y ventas...'))
+
         operador = Usuario.objects.filter(email='operador@estacion.com').first()
-        operador2 = Usuario.objects.filter(email='operador2@estacion.com').first()
-        isla1 = Isla.objects.filter(numero=1).first()
-        isla2 = Isla.objects.filter(numero=2).first()
+        islas = list(Isla.objects.all())
+        tipos = list(TipoCombustible.objects.filter(activo=True))
+        metodos_pago = ['EFECTIVO', 'TARJETA', 'QR', 'CREDITO_FLEET']
+        horarios = ['MANANA', 'TARDE', 'NOCHE']
 
-        turnos_data = [
-            {
-                'operador': operador,
-                'isla': isla1,
-                'horario': 'MANANA',
-                'estado': 'CERRADO',
-                'monto_inicial': 200.00,
-                'monto_final': 1850.50,
-                'observaciones': 'Turno de prueba mañana',
-            },
-            {
-                'operador': operador2,
-                'isla': isla2,
-                'horario': 'TARDE',
-                'estado': 'ABIERTO',
-                'monto_inicial': 150.00,
-                'monto_final': None,
-                'observaciones': 'Turno de prueba tarde',
-            },
-        ]
-
-        turnos_creados = []
-        for turno_data in turnos_data:
-            if not turno_data['operador'] or not turno_data['isla']:
-                self.stdout.write(self.style.WARNING('  Turno omitido: operador o isla no encontrados'))
-                continue
-            # Evitar duplicados simples por operador+isla+horario+estado
-            turno = Turno.objects.filter(
-                operador=turno_data['operador'],
-                isla=turno_data['isla'],
-                horario=turno_data['horario'],
-            ).first()
-            if not turno:
-                turno = Turno.objects.create(
-                    operador=turno_data['operador'],
-                    isla=turno_data['isla'],
-                    horario=turno_data['horario'],
-                    estado=turno_data['estado'],
-                    monto_inicial=turno_data['monto_inicial'],
-                    monto_final=turno_data['monto_final'],
-                    observaciones=turno_data['observaciones'],
-                )
-                self.stdout.write(self.style.SUCCESS(
-                    f'  Turno creado: {turno.operador.nombre} - Isla {turno.isla.numero} - {turno.horario}'
-                ))
-            else:
-                self.stdout.write(f'  Turno ya existe: {turno.operador.nombre} - Isla {turno.isla.numero}')
-            turnos_creados.append(turno)
-
-        # ── Ventas ────────────────────────────────────────────────────────────
-        if turnos_creados:
-            lado_1a = Lado.objects.filter(isla__numero=1, lado='A').first()
-            lado_1b = Lado.objects.filter(isla__numero=1, lado='B').first()
-            lado_2a = Lado.objects.filter(isla__numero=2, lado='A').first()
-            lado_2b = Lado.objects.filter(isla__numero=2, lado='B').first()
-
-            t_especial = TipoCombustible.objects.filter(tipo='GASOLINA_ESPECIAL').first()
-            t_premium  = TipoCombustible.objects.filter(tipo='GASOLINA_PREMIUM').first()
-            t_diesel   = TipoCombustible.objects.filter(tipo='DIESEL').first()
-            t_gnv      = TipoCombustible.objects.filter(tipo='GNV').first()
-
-            turno1 = turnos_creados[0]
-            turno2 = turnos_creados[1] if len(turnos_creados) > 1 else turnos_creados[0]
-
-            cli1 = clientes_creados[0] if clientes_creados else None
-            cli2 = clientes_creados[1] if len(clientes_creados) > 1 else None
-            cli3 = clientes_creados[2] if len(clientes_creados) > 2 else None
-
-            ventas_data = [
-                # comprobante, turno, lado, tipo, cliente, litros, precio, metodo, estado
-                ('VTA-0001', turno1, lado_1a, t_especial, cli1,  20.000,  6.96, 'EFECTIVO',      'COMPLETADA'),
-                ('VTA-0002', turno1, lado_1b, t_premium,  None,  15.500, 11.00, 'QR',            'COMPLETADA'),
-                ('VTA-0003', turno1, lado_1a, t_diesel,   cli2,  30.000,  9.80, 'TARJETA',       'COMPLETADA'),
-                ('VTA-0004', turno1, lado_1b, t_gnv,      None,  10.000,  2.73, 'EFECTIVO',      'COMPLETADA'),
-                ('VTA-0005', turno1, lado_1a, t_especial, cli3,  25.000,  6.96, 'CREDITO_FLEET', 'COMPLETADA'),
-                ('VTA-0006', turno2, lado_2a, t_premium,  cli1,  18.000, 11.00, 'EFECTIVO',      'COMPLETADA'),
-                ('VTA-0007', turno2, lado_2b, t_diesel,   None,  40.000,  9.80, 'QR',            'COMPLETADA'),
-                ('VTA-0008', turno2, lado_2a, t_especial, cli2,  12.000,  6.96, 'TARJETA',       'ANULADA'),
-                ('VTA-0009', turno2, lado_2b, t_gnv,      cli3,   8.000,  2.73, 'EFECTIVO',      'COMPLETADA'),
-                ('VTA-0010', turno2, lado_2a, t_premium,  None,  22.500, 11.00, 'QR',            'COMPLETADA'),
-            ]
-
-            admin_user = Usuario.objects.filter(email='admin@estacion.com').first()
-
-            for comprobante, turno, lado, tipo_comb, cliente, litros, precio, metodo, estado in ventas_data:
-                if not all([turno, lado, tipo_comb]):
-                    self.stdout.write(self.style.WARNING(f'  Venta {comprobante} omitida: faltan datos'))
-                    continue
-                if Venta.objects.filter(numero_comprobante=comprobante).exists():
-                    self.stdout.write(f'  Venta ya existe: {comprobante}')
-                    continue
-                total = round(litros * precio, 2)
-                Venta.objects.create(
-                    numero_comprobante=comprobante,
-                    turno=turno,
-                    lado=lado,
-                    tipo_combustible=tipo_comb,
-                    cliente=cliente,
-                    litros=litros,
-                    precio_unitario=precio,
-                    total=total,
-                    metodo_pago=metodo,
-                    estado=estado,
-                    created_by=admin_user,
-                )
-                self.stdout.write(self.style.SUCCESS(f'  Venta creada: {comprobante} - Bs. {total}'))
+        if not operador:
+            self.stdout.write(self.style.WARNING('  Turnos omitidos: operador no encontrado'))
+        elif not islas or not tipos:
+            self.stdout.write(self.style.WARNING('  Turnos omitidos: no hay islas o tipos de combustible'))
         else:
-            self.stdout.write(self.style.WARNING('  Ventas omitidas: no hay turnos disponibles'))
+            turnos_creados = 0
+            ventas_creadas = 0
+
+            for dias_atras in range(30, 0, -1):
+                fecha = timezone.now() - timedelta(days=dias_atras)
+
+                # 1 o 2 turnos por día
+                for _ in range(random.randint(1, 2)):
+                    isla = random.choice(islas)
+                    lados = list(Lado.objects.filter(isla=isla, activo=True))
+                    if not lados:
+                        continue
+
+                    horario = random.choice(horarios)
+                    fecha_apertura = fecha.replace(
+                        hour=random.randint(6, 20),
+                        minute=0, second=0, microsecond=0
+                    )
+                    fecha_cierre = fecha_apertura + timedelta(hours=8)
+
+                    turno = Turno.objects.create(
+                        operador=operador,
+                        isla=isla,
+                        horario=horario,
+                        estado='CERRADO',
+                        monto_inicial=random.randint(100, 500),
+                        monto_final=random.randint(500, 3000),
+                        observaciones='Turno de demostración',
+                    )
+
+                    # Ajustar fechas manualmente hacia atrás
+                    Turno.objects.filter(pk=turno.pk).update(
+                        fecha_apertura=fecha_apertura,
+                        fecha_cierre=fecha_cierre,
+                        created_at=fecha_apertura,
+                    )
+
+                    turnos_creados += 1
+
+                    # 3 a 8 ventas por turno
+                    for _ in range(random.randint(3, 8)):
+                        tipo = random.choice(tipos)
+                        lado = random.choice(lados)
+                        metodo = random.choice(metodos_pago)
+                        monto = random.choice([50, 100, 150, 200, 250, 300])
+                        litros = round(monto / float(tipo.precio_litro), 3)
+                        cliente = random.choice(clientes_creados + [None, None])
+
+                        if metodo == 'CREDITO_FLEET' and (
+                            not cliente or cliente.saldo_credito < monto
+                        ):
+                            metodo = 'EFECTIVO'
+
+                        comprobante = (
+                            f"VTA-{fecha_apertura.strftime('%Y%m%d')}"
+                            f"-{str(uuid.uuid4())[:8].upper()}"
+                        )
+
+                        venta = Venta.objects.create(
+                            turno=turno,
+                            lado=lado,
+                            tipo_combustible=tipo,
+                            cliente=cliente,
+                            litros=litros,
+                            precio_unitario=tipo.precio_litro,
+                            total=monto,
+                            metodo_pago=metodo,
+                            estado='COMPLETADA',
+                            numero_comprobante=comprobante,
+                            created_by=operador,
+                        )
+
+                        # Ajustar fecha de venta hacia atrás
+                        fecha_venta = fecha_apertura + timedelta(
+                            minutes=random.randint(10, 400)
+                        )
+                        Venta.objects.filter(pk=venta.pk).update(
+                            fecha_hora=fecha_venta
+                        )
+
+                        ventas_creadas += 1
+
+            self.stdout.write(self.style.SUCCESS(
+                f'  Turnos creados: {turnos_creados} | Ventas creadas: {ventas_creadas}'
+            ))
 
         # ── Resumen ───────────────────────────────────────────────────────────
-        self.stdout.write(self.style.SUCCESS('\nSeed completado exitosamente!'))
+        self.stdout.write(self.style.SUCCESS(f'\nSeed completado exitosamente!'))
+        self.stdout.write(self.style.NOTICE(f'  Clientes/Vehículos: {len(clientes_creados)}'))
         self.stdout.write(self.style.NOTICE('Credenciales:'))
         self.stdout.write('  Admin:          admin@estacion.com        / admin123')
         self.stdout.write('  Enrique:        enriquemamani2403@gmail.com / enrique123')

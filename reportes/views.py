@@ -5,9 +5,11 @@ from django.db.models import Sum, Count
 from django.db.models.functions import Coalesce
 from django.conf import settings
 from django.utils import timezone
+from django.core.mail import EmailMessage
 from functools import partial
 from decimal import Decimal
 from datetime import timedelta
+import io
 import json
 import requests
 
@@ -499,3 +501,198 @@ JSON:"""
     _registrar_bitacora(request, f'Interpretó comando de voz: "{texto[:100]}"')
 
     return Response(resultado)
+
+
+# ── Enviar Reporte por Email ──────────────────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, ReportesPermiso])
+def enviar_reporte_email(request):
+    """
+    Genera un archivo adjunto con los datos del reporte y lo envía por email.
+
+    Body esperado:
+    {
+        "destinatario": "usuario@ejemplo.com",
+        "asunto": "Reporte de Ventas",
+        "tipo_reporte": "ventas",
+        "formato": "excel" | "pdf" | "html",
+        "columnas": ["Col1", "Col2", ...],
+        "datos": [["val1", "val2"], ["val1", "val2"], ...]
+    }
+    """
+    destinatario = request.data.get('destinatario', '').strip()
+    asunto       = request.data.get('asunto', 'Reporte').strip()
+    tipo_reporte = request.data.get('tipo_reporte', 'reporte').strip()
+    formato      = request.data.get('formato', 'excel').strip().lower()
+    columnas     = request.data.get('columnas', [])
+    datos        = request.data.get('datos', [])
+
+    # ── Validaciones básicas ──────────────────────────────────────────────────
+    if not destinatario:
+        return Response({'error': 'El campo "destinatario" es requerido.'}, status=400)
+    if not columnas:
+        return Response({'error': 'El campo "columnas" no puede estar vacío.'}, status=400)
+    if formato not in ('excel', 'pdf', 'html'):
+        return Response({'error': 'El campo "formato" debe ser "excel", "pdf" o "html".'}, status=400)
+
+    # ── Generar archivo según formato ─────────────────────────────────────────
+    try:
+        if formato == 'excel':
+            adjunto_bytes, nombre_archivo, mime_type = _generar_excel(columnas, datos, tipo_reporte)
+        elif formato == 'pdf':
+            adjunto_bytes, nombre_archivo, mime_type = _generar_pdf(columnas, datos, tipo_reporte, asunto)
+        else:  # html
+            adjunto_bytes, nombre_archivo, mime_type = _generar_html(columnas, datos, tipo_reporte, asunto)
+    except Exception as e:
+        return Response({'error': f'Error al generar el archivo: {str(e)}'}, status=500)
+
+    # ── Enviar email ──────────────────────────────────────────────────────────
+    try:
+        email = EmailMessage(
+            subject=asunto,
+            body=(
+                f'Estimado/a,\n\n'
+                f'Adjunto encontrará el reporte de {tipo_reporte} en formato {formato.upper()}.\n\n'
+                f'Generado el {timezone.now().strftime("%d/%m/%Y a las %H:%M")}.\n\n'
+                f'Sistema de Gestión — Estación de Servicio'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[destinatario],
+        )
+        email.attach(nombre_archivo, adjunto_bytes, mime_type)
+        email.send(fail_silently=False)
+    except Exception as e:
+        return Response({'error': f'Error al enviar el email: {str(e)}'}, status=500)
+
+    _registrar_bitacora(
+        request,
+        f'Envió reporte de {tipo_reporte} en formato {formato} a {destinatario}',
+    )
+
+    return Response({'mensaje': f'Reporte enviado correctamente a {destinatario}'})
+
+
+# ── Helpers de generación de archivos ────────────────────────────────────────
+
+def _generar_excel(columnas, datos, tipo_reporte):
+    """Genera un archivo Excel en memoria y devuelve (bytes, nombre, mime)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = tipo_reporte.capitalize()
+
+    # Estilo de cabecera
+    header_font  = Font(bold=True, color='FFFFFF')
+    header_fill  = PatternFill(fill_type='solid', fgColor='1F4E79')
+    header_align = Alignment(horizontal='center', vertical='center')
+
+    for col_idx, col_name in enumerate(columnas, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = header_align
+
+    # Filas de datos
+    for row_idx, fila in enumerate(datos, start=2):
+        for col_idx, valor in enumerate(fila, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=valor)
+
+    # Ajustar ancho de columnas automáticamente
+    for col in ws.columns:
+        max_len = max((len(str(cell.value)) if cell.value else 0) for cell in col)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    nombre = f'reporte_{tipo_reporte}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    mime   = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return buffer.read(), nombre, mime
+
+
+def _generar_pdf(columnas, datos, tipo_reporte, asunto):
+    """Genera un archivo PDF en memoria y devuelve (bytes, nombre, mime)."""
+    from reportlab.lib.pagesizes import landscape, A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+
+    buffer = io.BytesIO()
+    doc    = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1*cm, rightMargin=1*cm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Título
+    elements.append(Paragraph(asunto, styles['Title']))
+    elements.append(Paragraph(
+        f'Generado el {timezone.now().strftime("%d/%m/%Y a las %H:%M")}',
+        styles['Normal'],
+    ))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # Tabla
+    table_data = [columnas] + [list(fila) for fila in datos]
+    col_count  = len(columnas)
+    col_width  = (landscape(A4)[0] - 2*cm) / col_count if col_count else 4*cm
+
+    table = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0),  colors.HexColor('#1F4E79')),
+        ('TEXTCOLOR',   (0, 0), (-1, 0),  colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1, 0),  9),
+        ('ALIGN',       (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EBF3FB')]),
+        ('FONTSIZE',    (0, 1), (-1, -1), 8),
+        ('GRID',        (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+        ('TOPPADDING',  (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    nombre = f'reporte_{tipo_reporte}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    return buffer.read(), nombre, 'application/pdf'
+
+
+def _generar_html(columnas, datos, tipo_reporte, asunto):
+    """Genera un archivo HTML en memoria y devuelve (bytes, nombre, mime)."""
+    filas_html = ''.join(
+        '<tr>' + ''.join(f'<td style="padding:6px 10px;border:1px solid #ddd">{v}</td>' for v in fila) + '</tr>'
+        for fila in datos
+    )
+    headers_html = ''.join(
+        f'<th style="padding:8px 10px;background:#1F4E79;color:#fff;border:1px solid #1F4E79">{c}</th>'
+        for c in columnas
+    )
+    html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{asunto}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; padding: 20px; }}
+    h1   {{ color: #1F4E79; }}
+    table {{ border-collapse: collapse; width: 100%; margin-top: 16px; }}
+    tr:nth-child(even) td {{ background: #EBF3FB; }}
+  </style>
+</head>
+<body>
+  <h1>{asunto}</h1>
+  <p>Generado el {timezone.now().strftime("%d/%m/%Y a las %H:%M")}</p>
+  <table>
+    <thead><tr>{headers_html}</tr></thead>
+    <tbody>{filas_html}</tbody>
+  </table>
+</body>
+</html>"""
+
+    nombre = f'reporte_{tipo_reporte}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.html'
+    return html.encode('utf-8'), nombre, 'text/html'

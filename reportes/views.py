@@ -469,7 +469,7 @@ JSON:"""
                 'temperature': 0.1,
                 'max_tokens': 256,
             },
-            timeout=15,
+            timeout=(3, 10),
         )
         response.raise_for_status()
     except requests.exceptions.Timeout:

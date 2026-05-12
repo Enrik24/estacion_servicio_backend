@@ -408,7 +408,6 @@ def asignar_roles(request, pk):
 
     return Response({'mensaje': 'Roles asignados correctamente'})
 
-
 asignar_roles.permiso_requerido = 'usuarios.asignar_roles'
 
 

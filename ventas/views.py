@@ -22,6 +22,7 @@ from .serializers import (
     TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer,
     TicketVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer,
     ConsolidacionCajaSerializer
+
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
@@ -545,6 +546,13 @@ class VehiculoViewSet(GenericViewSet):
             response_data['credenciales'] = credenciales
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, HasPermiso])
+    def ticket(self, request, pk=None):
+        venta = self.get_object()
+        serializer = TicketVentaSerializer(venta)
+        return Response(serializer.data)
+
 class SucursalViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sucursales con creación automática de islas y lados."""
     queryset = Sucursal.objects.all()

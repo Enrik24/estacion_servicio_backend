@@ -26,4 +26,5 @@ urlpatterns = [
     path('api/seguridad/', include('seguridad.urls')),  # Bitácora
     path('api/backup/', include('backup.urls')),
     path('api/', include('ventas.urls')),
+    path('api/reportes/', include('reportes.urls')),
 ]

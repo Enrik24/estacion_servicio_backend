@@ -18,8 +18,10 @@ import re
 from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo
 
 from .serializers import (
-    ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
-    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer
+    SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
+    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer,
+    TicketVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer,
+    ConsolidacionCajaSerializer
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
@@ -419,6 +421,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response(VentaSerializer(ventas, many=True).data)
         except Turno.DoesNotExist:
             return Response({'ventas': [], 'mensaje': 'No tienes turno abierto'})
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def ticket(self, request, pk=None):
+        """Obtiene el ticket/comprobante de una venta específica."""
+        venta = self.get_object()
+        serializer = TicketVentaSerializer(venta)
+        return Response(serializer.data)
 class VehiculoViewSet(GenericViewSet):
     """ViewSet para gestionar vehículos y búsqueda por placa."""
     queryset = Vehiculo.objects.select_related('cliente').all()

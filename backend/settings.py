@@ -54,7 +54,9 @@ INSTALLED_APPS = [
     'seguridad',
     'utils',
     'ventas',
+    'reportes',
     'backup',
+
 ]
 
 MIDDLEWARE = [
@@ -196,3 +198,17 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+
+#GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
+
+GROQ_API_KEY = config('GROQ_API_KEY', default=None)
+
+# Email (SMTP Gmail)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_PASS')
+DEFAULT_FROM_EMAIL = config('EMAIL_USER')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')

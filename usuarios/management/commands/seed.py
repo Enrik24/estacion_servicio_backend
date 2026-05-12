@@ -515,27 +515,37 @@ class Command(BaseCommand):
                     )
                     fecha_cierre = fecha_apertura + timedelta(hours=8)
 
-                    turno = Turno.objects.create(
-                        operador=operador,
+                    # Verificar si ya existe un turno para esta isla, horario y fecha aproximada
+                    turno = Turno.objects.filter(
                         isla=isla,
                         horario=horario,
-                        estado='CERRADO',
-                        monto_inicial=random.randint(100, 500),
-                        monto_final=random.randint(500, 3000),
-                        observaciones='Turno de demostración',
-                    )
+                        fecha_apertura__date=fecha_apertura.date()
+                    ).first()
 
-                    # Ajustar fechas manualmente hacia atrás
-                    Turno.objects.filter(pk=turno.pk).update(
-                        fecha_apertura=fecha_apertura,
-                        fecha_cierre=fecha_cierre,
-                        created_at=fecha_apertura,
-                    )
+                    if not turno:
+                        turno = Turno.objects.create(
+                            operador=operador,
+                            isla=isla,
+                            horario=horario,
+                            estado='CERRADO',
+                            monto_inicial=random.randint(100, 500),
+                            monto_final=random.randint(500, 3000),
+                            observaciones='Turno de demostración',
+                        )
 
-                    turnos_creados += 1
+                        # Ajustar fechas manualmente hacia atrás
+                        Turno.objects.filter(pk=turno.pk).update(
+                            fecha_apertura=fecha_apertura,
+                            fecha_cierre=fecha_cierre,
+                            created_at=fecha_apertura,
+                        )
+                        turnos_creados += 1
+                    else:
+                        self.stdout.write(f'    Turno ya existe: Isla {isla.numero} - {horario} - {fecha_apertura.date()}')
 
                     # 3 a 8 ventas por turno
-                    for _ in range(random.randint(3, 8)):
+                    num_ventas = random.randint(3, 8)
+                    for j in range(num_ventas):
                         tipo = random.choice(tipos)
                         lado = random.choice(lados)
                         metodo = random.choice(metodos_pago)
@@ -548,34 +558,34 @@ class Command(BaseCommand):
                         ):
                             metodo = 'EFECTIVO'
 
-                        comprobante = (
-                            f"VTA-{fecha_apertura.strftime('%Y%m%d')}"
-                            f"-{str(uuid.uuid4())[:8].upper()}"
-                        )
+                        # Comprobante determinista para evitar duplicados en re-ejecuciones
+                        comprobante = f"VTA-{turno.id}-{j+1}"
 
-                        venta = Venta.objects.create(
-                            turno=turno,
-                            lado=lado,
-                            tipo_combustible=tipo,
-                            cliente=cliente,
-                            litros=litros,
-                            precio_unitario=tipo.precio_litro,
-                            total=monto,
-                            metodo_pago=metodo,
-                            estado='COMPLETADA',
+                        venta, created = Venta.objects.get_or_create(
                             numero_comprobante=comprobante,
-                            created_by=operador,
+                            defaults={
+                                'turno': turno,
+                                'lado': lado,
+                                'tipo_combustible': tipo,
+                                'cliente': cliente,
+                                'litros': litros,
+                                'precio_unitario': tipo.precio_litro,
+                                'total': monto,
+                                'metodo_pago': metodo,
+                                'estado': 'COMPLETADA',
+                                'created_by': operador,
+                            }
                         )
 
-                        # Ajustar fecha de venta hacia atrás
-                        fecha_venta = fecha_apertura + timedelta(
-                            minutes=random.randint(10, 400)
-                        )
-                        Venta.objects.filter(pk=venta.pk).update(
-                            fecha_hora=fecha_venta
-                        )
-
-                        ventas_creadas += 1
+                        if created:
+                            # Ajustar fecha de venta hacia atrás solo si se acaba de crear
+                            fecha_venta = fecha_apertura + timedelta(
+                                minutes=random.randint(10, 400)
+                            )
+                            Venta.objects.filter(pk=venta.pk).update(
+                                fecha_hora=fecha_venta
+                            )
+                            ventas_creadas += 1
 
             self.stdout.write(self.style.SUCCESS(
                 f'  Turnos creados: {turnos_creados} | Ventas creadas: {ventas_creadas}'

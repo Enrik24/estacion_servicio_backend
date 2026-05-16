@@ -2,65 +2,6 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Usuario, Rol, Permiso, LimiteConsumo
-from ventas.models import Cliente as VentasCliente
-
-
-def _usuario_tiene_rol_cliente(roles):
-    return any((getattr(rol, 'nombre', '') or '').strip().lower() == 'cliente' for rol in roles)
-
-
-def _norm_text(value):
-    value = (value or "").strip()
-    return value or None
-
-
-def _norm_email(value):
-    value = _norm_text(value)
-    return value.lower() if value else None
-
-
-def _norm_phone(value):
-    value = _norm_text(value)
-    return value
-
-
-def _is_system_nit(value):
-    value = (value or "").strip().upper()
-    return value.startswith("USR")
-
-
-def _upsert_cliente_ventas_desde_usuario(usuario):
-    email = _norm_email(usuario.email)
-    telefono = _norm_phone(getattr(usuario, "telefono", None))
-    nombre = _norm_text(usuario.nombre) or "Cliente"
-
-    cliente = None
-    if email:
-        cliente = VentasCliente.objects.filter(email__iexact=email).order_by("id").first()
-
-    if not cliente:
-        filtros = VentasCliente.objects.filter(nombre__iexact=nombre)
-        if telefono:
-            filtros = filtros.filter(telefono=telefono)
-        cliente = filtros.order_by("id").first()
-
-    if not cliente:
-        cliente = VentasCliente(email=email)
-
-    cliente.email = email
-    cliente.nombre = nombre
-    if telefono:
-        cliente.telefono = telefono
-    cliente.activo = bool(usuario.is_active)
-    if _is_system_nit(cliente.nit):
-        cliente.nit = None
-    cliente.save()
-
-    # Evitar duplicados en selector de ventas:
-    # si hay más clientes con mismo email, desactivamos extras.
-    if email:
-        duplicados = VentasCliente.objects.filter(email__iexact=email).exclude(id=cliente.id)
-        duplicados.update(activo=False)
 
 class PermisoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -154,9 +95,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
             
         if roles_data:
             usuario.roles.set(roles_data)
-
-        if _usuario_tiene_rol_cliente(roles_data):
-            _upsert_cliente_ventas_desde_usuario(usuario)
             
         if request and request.user.is_authenticated:
             usuario.created_by = request.user
@@ -177,16 +115,11 @@ class UsuarioSerializer(serializers.ModelSerializer):
         
         if roles_data is not None:
             instance.roles.set(roles_data)
-            roles_actuales = roles_data
-        else:
-            roles_actuales = instance.roles.all()
             
         if request and request.user.is_authenticated:
             instance.updated_by = request.user
             
         instance.save()
-        if _usuario_tiene_rol_cliente(roles_actuales):
-            _upsert_cliente_ventas_desde_usuario(instance)
         return instance
 
 
@@ -219,23 +152,9 @@ class CambiarPasswordSerializer(serializers.Serializer):
 
 
 class ClienteSimpleSerializer(serializers.ModelSerializer):
-    is_active = serializers.BooleanField(source='activo')
-
     class Meta:
-        model = VentasCliente
-        fields = ['id', 'nombre', 'email', 'nit', 'is_active']
-
-
-class ClienteVentasSerializer(serializers.ModelSerializer):
-    is_active = serializers.BooleanField(source='activo')
-
-    class Meta:
-        model = VentasCliente
-        fields = ['id', 'nombre', 'email', 'nit', 'telefono', 'is_active']
-
-    def create(self, validated_data):
-        validated_data['activo'] = validated_data.get('activo', True)
-        return super().create(validated_data)
+        model = Usuario
+        fields = ['id', 'nombre', 'email', 'is_active']
 
 
 class LimiteConsumoSerializer(serializers.ModelSerializer):
@@ -267,6 +186,9 @@ class LimiteConsumoSerializer(serializers.ModelSerializer):
         is_active = attrs.get('is_active')
         if is_active is None:
             is_active = instance.is_active if instance else True
+
+        if cliente and not cliente.roles.filter(nombre__iexact='Cliente').exists():
+            raise serializers.ValidationError({'cliente': 'El usuario seleccionado no tiene rol Cliente.'})
 
         if valor is None or Decimal(str(valor)) <= 0:
             raise serializers.ValidationError({'valor': 'El valor del límite debe ser mayor a 0.'})
@@ -317,7 +239,7 @@ class ValidarConsumoSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         cliente_id = attrs['cliente_id']
-        if not VentasCliente.objects.filter(id=cliente_id, activo=True).exists():
+        if not Usuario.objects.filter(id=cliente_id).exists():
             raise serializers.ValidationError({'cliente_id': 'Cliente no encontrado.'})
         attrs['fecha'] = attrs.get('fecha') or timezone.localdate()
         return attrs
@@ -330,6 +252,6 @@ class PrediccionConsumoRequestSerializer(serializers.Serializer):
     dias = serializers.IntegerField(required=False, min_value=1, max_value=31, default=7)
 
     def validate_cliente_id(self, value):
-        if not VentasCliente.objects.filter(id=value, activo=True).exists():
+        if not Usuario.objects.filter(id=value).exists():
             raise serializers.ValidationError('Cliente no encontrado.')
         return value

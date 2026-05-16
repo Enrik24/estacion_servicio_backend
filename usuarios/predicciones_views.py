@@ -1,10 +1,10 @@
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.response import Response
 
-from .prediccion_consumo_service import generar_prediccion_consumo
 from .serializers import PrediccionConsumoRequestSerializer
+from .prediccion_consumo_service import generar_prediccion_consumo
 
 
 class PrediccionConsumoAPIView(APIView):

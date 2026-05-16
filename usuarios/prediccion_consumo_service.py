@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
+
 from django.utils import timezone
 
 from .models import LimiteConsumo
@@ -24,6 +25,7 @@ def _estimacion_base(cliente_id: int, tipo: str, unidad: str):
         return {
             "base": _to_decimal(limite_principal.valor * Decimal("0.72")),
             "origen": "limite_mismo_tipo",
+            "limite_referencia": limite_principal,
             "advertencia": None,
         }
 
@@ -40,12 +42,15 @@ def _estimacion_base(cliente_id: int, tipo: str, unidad: str):
         return {
             "base": _to_decimal(limite_alternativo.valor * Decimal("0.65")),
             "origen": "limite_otro_tipo_misma_unidad",
+            "limite_referencia": limite_alternativo,
             "advertencia": None,
         }
 
+    # Fallback mock cuando no hay límites configurados.
     return {
         "base": _to_decimal(Decimal("120.00")),
         "origen": "fallback_sin_limites",
+        "limite_referencia": None,
         "advertencia": (
             f"No hay límites activos en {unidad} para este cliente. "
             "Se usó una predicción base por defecto."
@@ -53,7 +58,13 @@ def _estimacion_base(cliente_id: int, tipo: str, unidad: str):
     }
 
 
-def generar_prediccion_consumo(*, cliente_id: int, tipo_periodo: str, unidad: str, dias: int = 7):
+def generar_prediccion_consumo(
+    *,
+    cliente_id: int,
+    tipo_periodo: str,
+    unidad: str,
+    dias: int = 7,
+):
     contexto_base = _estimacion_base(cliente_id=cliente_id, tipo=tipo_periodo, unidad=unidad)
     base = contexto_base["base"]
     hoy = timezone.localdate()

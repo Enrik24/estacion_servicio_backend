@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from usuarios.models import Usuario
 
@@ -51,6 +53,7 @@ class Sucursal(models.Model):
 
     def __str__(self):
         return self.nombre
+
 class Isla(models.Model):
     ESTADOS = [
         ('ACTIVO', 'Activo'),
@@ -80,7 +83,6 @@ class Isla(models.Model):
     def __str__(self):
         return f"Isla {self.numero}"
 
-
 class Lado(models.Model):
     LADOS = [
         ('A', 'Lado A'),
@@ -101,7 +103,6 @@ class Lado(models.Model):
 
     def __str__(self):
         return f"Isla {self.isla.numero} - Lado {self.lado}"
-
 
 class Turno(models.Model):
     ESTADOS = [
@@ -125,6 +126,14 @@ class Turno(models.Model):
     monto_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     monto_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     observaciones = models.TextField(blank=True, null=True)
+    consolidado = models.BooleanField(default=False)
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.CASCADE,
+        related_name='turnos',
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -135,12 +144,18 @@ class Turno(models.Model):
     def __str__(self):
         return f"Turno {self.id} - {self.operador.nombre} - Isla {self.isla.numero}"
 
-
 class Cliente(models.Model):
     id = models.BigAutoField(primary_key=True)
     nombre = models.CharField(max_length=150)
     nit = models.CharField(max_length=20, unique=True, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cliente_ventas',
+    )
     telefono = models.CharField(max_length=20, null=True, blank=True)
     limite_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     saldo_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -196,6 +211,7 @@ class Venta(models.Model):
     metodo_pago = models.CharField(max_length=20, choices=METODOS_PAGO)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='COMPLETADA')
     numero_comprobante = models.CharField(max_length=50, unique=True)
+    client_request_id = models.UUIDField(unique=True, null=True, blank=True, db_index=True, default=None)
     fecha_hora = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='ventas_registradas')
 
@@ -207,3 +223,24 @@ class Venta(models.Model):
 
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
+    
+
+class CompraCombustible(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    tipo_combustible = models.ForeignKey(TipoCombustible, on_delete=models.PROTECT, related_name='compras')
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    unidad = models.CharField(max_length=10)
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+    observacion = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='compras_registradas')
+
+    class Meta:
+        db_table = 'compras_combustible'
+        verbose_name = 'Compra de Combustible'
+        verbose_name_plural = 'Compras de Combustible'
+        ordering = ['-fecha_hora']
+
+    def __str__(self):
+        return f"Compra {self.id} - {self.tipo_combustible.get_tipo_display()} - Bs. {self.total}"

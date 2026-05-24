@@ -24,7 +24,13 @@ class Bitacora(models.Model):
         null=True, 
         blank=True
     )
-
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bitacoras'
+    )
     usuario_email = models.EmailField(null=True, blank=True)
     usuario_nombre = models.CharField(max_length=150, null=True, blank=True)
     usuario_rol = models.CharField(max_length=150, null=True, blank=True)
@@ -48,3 +54,22 @@ class Bitacora(models.Model):
 
     def __str__(self):
         return f"{self.accion} - {self.usuario_email or "Sistema"} - {self.fecha_hora.strftime('%Y-%m-%d %H:%M')}"
+def registrar_bitacora(request, accion, descripcion, estado='EXITO', modulo='Sistema', usuario=None):
+    try:
+        usuario_log = usuario or (request.user if request.user.is_authenticated else None)
+        empresa = getattr(usuario_log, 'empresa', None) if usuario_log else None
+        Bitacora.objects.create(
+            usuario=usuario_log,
+            empresa=empresa,
+            usuario_email=getattr(usuario_log, 'email', None),
+            usuario_nombre=getattr(usuario_log, 'nombre', None),
+            usuario_rol=getattr(usuario_log, 'nombre_rol', 'Sin rol') if usuario_log else 'Sin rol',
+            accion=accion,
+            estado=estado,
+            modulo_afectado=modulo,
+            descripcion=descripcion,
+            ip_address=getattr(request, 'ip_address', None),
+            user_agent=getattr(request, 'user_agent', '')[:500]
+        )
+    except Exception:
+        pass

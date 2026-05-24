@@ -7,6 +7,39 @@ import uuid
 from .managers import UsuarioManager
 
 
+class Empresa(models.Model):
+    PLANES = [
+        ('BASICO', 'Básico'),
+        ('PROFESIONAL', 'Profesional'),
+        ('ENTERPRISE', 'Enterprise'),
+    ]
+    ESTADOS = [
+        ('ACTIVA', 'Activa'),
+        ('INACTIVA', 'Inactiva'),
+        ('SUSPENDIDA', 'Suspendida'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    nombre = models.CharField(max_length=150)
+    nit = models.CharField(max_length=20, blank=True, null=True)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    direccion = models.CharField(max_length=255, blank=True, null=True)
+    plan = models.CharField(max_length=20, choices=PLANES, default='BASICO')
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVA')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    latitud = models.DecimalField(max_digits=18, decimal_places=15, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=18, decimal_places=15, blank=True, null=True)
+
+    class Meta:
+        db_table = 'empresas'
+        verbose_name = 'Empresa'
+        verbose_name_plural = 'Empresas'
+
+    def __str__(self):
+        return self.nombre
+
 class Permiso(models.Model):
     id = models.BigAutoField(primary_key=True)
     codigo = models.CharField(max_length=100, unique=True)
@@ -102,7 +135,14 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['nombre']
 
     objects = UsuarioManager()
-
+    
+    empresa = models.ForeignKey(
+        'Empresa',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usuarios'
+    )
     sucursal = models.ForeignKey(
         'ventas.Sucursal',
         on_delete=models.SET_NULL,

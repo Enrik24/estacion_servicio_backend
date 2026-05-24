@@ -11,29 +11,15 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Usuario, Rol, Permiso, LimiteConsumo,PasswordResetToken
+from .models import Usuario, Rol, Permiso, LimiteConsumo,PasswordResetToken,Empresa
 from .serializers import (
     UsuarioSerializer, UsuarioMeSerializer, RolSerializer,
     PermisoSerializer, CambiarPasswordSerializer, LimiteConsumoSerializer,
-    ValidarConsumoSerializer
+    ValidarConsumoSerializer, EmpresaSerializer, CrearEmpresaSerializer
 
 )
 from utils.permissions import HasPermiso
-from seguridad.models import Bitacora
-
-
-
-def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None):
-    usuario_log = request.user if request.user.is_authenticated else None
-    Bitacora.objects.create(
-        usuario=usuario_log,
-        usuario_email=getattr(usuario_log, 'email', None),
-        usuario_nombre=getattr(usuario_log, 'nombre', None),
-        accion=accion,
-        estado=estado,
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
-    )
+from seguridad.models import Bitacora,registrar_bitacora
 
 # CRUD USUARIOS
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -43,7 +29,17 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     permiso_requerido = 'usuarios.ver'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active', 'roles']
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Usuario.objects.all().order_by('id')
+        if user.empresa:
+            qs = Usuario.objects.filter(empresa=user.empresa).order_by('id')
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                qs = qs.filter(sucursal=user.sucursal)
+            return qs
+        return Usuario.objects.none()
     def get_permissions(self):
         if self.action == 'create':
             return [IsAuthenticated(), HasPermiso(permiso='usuarios.crear')]
@@ -52,25 +48,35 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         elif self.action == 'destroy':
             return [IsAuthenticated(), HasPermiso(permiso='usuarios.eliminar')]
         return super().get_permissions()
+    def perform_create(self, serializer):
+        usuario = serializer.save(empresa=self.request.user.empresa)
+        registrar_bitacora(
+            self.request,
+            accion='CREAR',
+            modulo='Administración y Seguridad',
+            descripcion=f'Creó el usuario: {usuario.email}',
+        )
+
+    def perform_update(self, serializer):
+        usuario = serializer.save()
+        registrar_bitacora(
+            self.request,
+            accion='EDITAR',
+            modulo='Administración y Seguridad',
+            descripcion=f'Editó el usuario: {usuario.email}',
+        )
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
 
         request = self.request
-        Bitacora.objects.create(
-            usuario=request.user,
-            usuario_email=request.user.email,
-            usuario_nombre=request.user.nombre,
-            usuario_rol=request.user.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='ELIMINAR',
-            estado='EXITO',
-            modulo_afectado='Administración y Seguridad',
-            descripcion='Eliminó al usuario: {instance.email}',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
+            modulo='Administración y Seguridad',
+            descripcion=f'Eliminó al usuario: {instance.email}',
         )
-
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         serializer = UsuarioMeSerializer(request.user)
@@ -97,17 +103,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             user.set_password(serializer.validated_data['password_nuevo'])
             user.save()
 
-            Bitacora.objects.create(
-                usuario=user,
-                usuario_email=user.email,
-                usuario_nombre=user.nombre,
-                usuario_rol=user.nombre_rol,
+            registrar_bitacora(
+                request,
                 accion='EDITAR',
-                estado='EXITO',
-                modulo_afectado='Administración y Seguridad',
-                descripcion='Actualizó su contraseña exitosamente',
-                ip_address=getattr(request, 'ip_address', None),
-                user_agent=getattr(request, 'user_agent', '')[:500]
+                modulo='Administración y Seguridad',
+                descripcion='Cambió su contraseña',
             )
 
             return Response({'mensaje': 'Contraseña actualizada correctamente'})
@@ -281,8 +281,124 @@ class LimiteConsumoViewSet(viewsets.ModelViewSet):
 
         registrar_bitacora(request, accion='EDITAR', estado='EXITO')
         return Response({'permitido': True, 'mensaje': 'Consumo dentro de los límites configurados.'})
+    
+class EmpresaViewSet(viewsets.ModelViewSet):
+    queryset = Empresa.objects.all().order_by('-created_at')
+    serializer_class = EmpresaSerializer
+    permission_classes = [IsAuthenticated]
 
-# LOGIN/LOGOUT
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        if not self.request.user.is_superuser:
+            return Empresa.objects.none()
+        return super().get_queryset()
+
+    def create(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Solo el super admin puede crear empresas'}, status=403)
+
+        serializer = CrearEmpresaSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        from django.db import transaction
+        with transaction.atomic():
+            empresa = Empresa.objects.create(
+                nombre=data['nombre'],
+                nit=data.get('nit') or None,
+                telefono=data.get('telefono') or None,
+                email=data.get('email') or None,
+                direccion=data.get('direccion') or None,
+                plan=data.get('plan', 'BASICO'),
+                latitud=request.data.get('latitud') or None,
+                longitud=request.data.get('longitud') or None,
+            )
+
+            # Crear tipos de combustible
+            tipos_combustible = request.data.get('tipos_combustible', {})
+            from ventas.models import TipoCombustible
+            for tipo, precio in tipos_combustible.items():
+                TipoCombustible.objects.create(
+                    tipo=tipo,
+                    precio_litro=precio,
+                    empresa=empresa,
+                    activo=True
+                )
+
+            rol_admin, _ = Rol.objects.get_or_create(nombre='Administrador')
+            admin = Usuario.objects.create(
+                nombre=data['admin_nombre'],
+                email=data['admin_email'],
+                empresa=empresa,
+                is_staff=True,
+            )
+            admin.set_password(data['admin_password'])
+            admin.save()
+            admin.roles.set([rol_admin])
+
+        return Response({
+            'empresa': EmpresaSerializer(empresa).data,
+            'admin': {
+                'id': admin.id,
+                'nombre': admin.nombre,
+                'email': admin.email,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch'])
+    def cambiar_estado(self, request, pk=None):
+        if not request.user.is_superuser:
+            return Response({'error': 'Sin permiso'}, status=403)
+        empresa = self.get_object()
+        estado = request.data.get('estado')
+        if estado not in ['ACTIVA', 'INACTIVA', 'SUSPENDIDA']:
+            return Response({'error': 'Estado inválido'}, status=400)
+        empresa.estado = estado
+        empresa.save()
+        return Response(EmpresaSerializer(empresa).data)
+    def partial_update(self, request, pk=None):
+        if not request.user.is_superuser:
+            return Response({'error': 'Sin permiso'}, status=403)
+        
+        empresa = self.get_object()
+        
+        campos = ['nombre', 'nit', 'telefono', 'email', 'direccion', 'plan']
+        for campo in campos:
+            if campo in request.data:
+                setattr(empresa, campo, request.data[campo])
+        empresa.save()
+
+        if request.data.get('nuevo_admin_email'):
+            from django.db import transaction
+            nuevo_email = request.data['nuevo_admin_email']
+            nuevo_nombre = request.data.get('nuevo_admin_nombre', '')
+            nuevo_password = request.data.get('nuevo_admin_password', '')
+
+            if Usuario.objects.filter(email=nuevo_email).exclude(empresa=empresa).exists():
+                return Response({'error': 'Este email ya está registrado en otra empresa'}, status=400)
+
+            with transaction.atomic():
+                rol_admin = Rol.objects.get(nombre='Administrador')
+                nuevo_admin, created = Usuario.objects.get_or_create(
+                    email=nuevo_email,
+                    defaults={
+                        'nombre': nuevo_nombre,
+                        'empresa': empresa,
+                        'is_staff': True,
+                        'is_active': True,
+                    }
+                )
+                if created and nuevo_password:
+                    nuevo_admin.set_password(nuevo_password)
+                    nuevo_admin.save()
+                nuevo_admin.roles.set([rol_admin])
+
+        return Response(EmpresaSerializer(empresa).data)
+    # LOGIN/LOGOUT
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
@@ -298,33 +414,23 @@ def login_view(request):
 
     if user:
         if not user.is_active:
-            Bitacora.objects.create(
-                usuario=user,
-                usuario_email=user.email,
-                usuario_nombre=user.nombre,
-                usuario_rol=nombres_del_rol,
+            registrar_bitacora(
+                request,
                 accion='LOGIN',
                 estado='ERROR',
-                modulo_afectado='Administración y Seguridad',
-                descripcion='Intento de inicio de sesión fallido',
-                ip_address=getattr(request, 'ip_address', None),
-                user_agent=getattr(request, 'user_agent', '')[:500]
+                modulo='Administración y Seguridad',
+                descripcion='Intento de inicio de sesión con usuario inactivo',
             )
             return Response({'error': 'Usuario inactivo'}, status=status.HTTP_403_FORBIDDEN)
 
         refresh = RefreshToken.for_user(user)
 
-        Bitacora.objects.create(
-            usuario=user,
-            usuario_email=user.email,
-            usuario_nombre=user.nombre,
-            usuario_rol=user.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='LOGIN',
-            estado='EXITO',
-            modulo_afectado='Administración y Seguridad',
+            modulo='Administración y Seguridad',
             descripcion='Inicio de sesión exitoso',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
+            usuario=user,
         )
 
         roles_ids = list(user.roles.values_list('id', flat=True))
@@ -342,22 +448,22 @@ def login_view(request):
                 'id': user.id,
                 'email': user.email,
                 'nombre': user.nombre,
+                'is_superuser': user.is_superuser,
+                'empresa_id': user.empresa_id,
+                'empresa_nombre': user.empresa.nombre if user.empresa else None,
+                'sucursal_id': user.sucursal_id,
+                'sucursal_nombre': user.sucursal.nombre if user.sucursal else None,
                 'roles': roles_ids,
                 'roles_detalle': roles_detalle,
             }
         })
 
-    Bitacora.objects.create(
-        usuario=None,
-        usuario_email=email,
-        usuario_nombre='Intento fallido',
-        usuario_rol='Sin rol',
-        accion='LOGIN',
-        estado='ERROR',
-        modulo_afectado='Administración y Seguridad',
-        descripcion='Intento de inicio de sesión fallido',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
+    registrar_bitacora(
+            request,
+            accion='LOGIN',
+            estado='ERROR',
+            modulo='Administración y Seguridad',
+            descripcion='Intento de inicio de sesión fallido',
     )
 
     return Response({'error': 'Credenciales inválidas', 'requested_email': email}, status=status.HTTP_401_UNAUTHORIZED)
@@ -366,17 +472,11 @@ def login_view(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
-    Bitacora.objects.create(
-        usuario=request.user,
-        usuario_email=request.user.email,
-        usuario_nombre=request.user.nombre,
-        usuario_rol=request.user.nombre_rol,
+    registrar_bitacora(
+        request,
         accion='LOGOUT',
-        estado='EXITO',
-        modulo_afectado='Administración y Seguridad',
+        modulo='Administración y Seguridad',
         descripcion='Cierre de sesión exitoso',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
     )
     return Response({'mensaje': 'Sesión cerrada correctamente'})
 
@@ -394,18 +494,7 @@ def asignar_roles(request, pk):
 
     roles_nombres = ", ".join([r.nombre for r in usuario.roles.all()])
 
-    Bitacora.objects.create(
-        usuario=request.user,
-        usuario_email=request.user.email,
-        usuario_nombre=request.user.nombre,
-        usuario_rol=request.user.nombre_rol,
-        accion='EDITAR',
-        estado='EXITO',
-        modulo_afectado='Administración y Seguridad',
-        descripcion=f'Asignó el rol de "{roles_nombres}" al usuario {usuario.email}',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
-    )
+    
 
     return Response({'mensaje': 'Roles asignados correctamente'})
 
@@ -467,17 +556,11 @@ def request_password_reset(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        Bitacora.objects.create(
-            usuario=usuario,
-            usuario_email=usuario.email,
-            usuario_nombre=usuario.nombre,
-            usuario_rol=usuario.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='RECUPERACION_CONTRASENA',
-            estado='EXITO',
-            modulo_afectado='Administración y Seguridad',
+            modulo='Administración y Seguridad',
             descripcion='Solicitó recuperación de contraseña. Email enviado exitosamente.',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
         )
 
     return Response(
@@ -522,17 +605,11 @@ def reset_password(request, token):
     reset_token.used = True
     reset_token.save(update_fields=['used'])
 
-    Bitacora.objects.create(
-        usuario=usuario,
-        usuario_email=usuario.email,
-        usuario_nombre=usuario.nombre,
-        usuario_rol=usuario.nombre_rol,
+    registrar_bitacora(
+        request,
         accion='RECUPERACION_CONTRASENA',
-        estado='EXITO',
-        modulo_afectado='Administración y Seguridad',
+        modulo='Administración y Seguridad',
         descripcion='Contraseña restablecida exitosamente mediante enlace de recuperación.',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
     )
 
     return Response(
@@ -576,17 +653,11 @@ def register_view(request):
     usuario.set_password(password)
     usuario.save()
 
-    Bitacora.objects.create(
-        usuario=usuario,
-        usuario_email=usuario.email,
-        usuario_nombre=usuario.nombre,
-        usuario_rol='Sin rol',
+    registrar_bitacora(
+        request,
         accion='CREAR',
-        estado='EXITO',
-        modulo_afectado='Administración y Seguridad',
+        modulo='Administración y Seguridad',
         descripcion='Nuevo usuario registrado mediante auto-registro.',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
     )
 
     return Response(

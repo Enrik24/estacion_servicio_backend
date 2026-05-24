@@ -159,16 +159,35 @@ class RegistrarClienteVehiculoSerializer(serializers.Serializer):
         return value    
 
 class SucursalSerializer(serializers.ModelSerializer):
-    """Serializador para sucursales con conteo de islas creadas."""
     cantidad_islas_creadas = serializers.SerializerMethodField()
-
+    gerente = serializers.SerializerMethodField()
+    tipos_combustible = serializers.PrimaryKeyRelatedField(
+        queryset=TipoCombustible.objects.all(),
+        many=True,
+        required=False
+    )
     class Meta:
         model = Sucursal
         fields = '__all__'
 
     def get_cantidad_islas_creadas(self, obj):
-        """Retorna el total de islas asociadas a la sucursal."""
-        return obj.islas.count()    
+        return obj.islas.count()
+
+    def get_gerente(self, obj):
+        from usuarios.models import Usuario
+        gerente = Usuario.objects.filter(
+            sucursal=obj,
+            roles__nombre__iexact='Gerente'
+        ).first()
+        if gerente:
+            return {'id': gerente.id, 'nombre': gerente.nombre}
+        gerente = Usuario.objects.filter(
+            sucursal=obj,
+            roles__nombre__iexact='Gerente/Dueño'
+        ).first()
+        if gerente:
+            return {'id': gerente.id, 'nombre': gerente.nombre}
+        return None  
 
 class ConsolidacionCajaSerializer(serializers.Serializer):
     """Serializador para reportes de consolidación de caja.

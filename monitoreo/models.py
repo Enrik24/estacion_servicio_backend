@@ -1,0 +1,61 @@
+from django.db import models
+from usuarios.models import Usuario, Empresa
+from ventas.models import Isla, Lado, Sucursal
+
+
+class EstadoSurtidor(models.Model):
+    ESTADOS = [
+        ('ACTIVO', 'Activo'),
+        ('INACTIVO', 'Inactivo'),
+        ('FALLA', 'Falla'),
+    ]
+
+    lado = models.OneToOneField(
+        Lado,
+        on_delete=models.CASCADE,
+        related_name='estado_surtidor'
+    )
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVO')
+    descripcion_falla = models.TextField(blank=True, null=True)
+    reportado_por = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='estados_reportados'
+    )
+    fecha_reporte = models.DateTimeField(auto_now=True)
+    fecha_resolucion = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'estados_surtidores'
+        verbose_name = 'Estado de Surtidor'
+        verbose_name_plural = 'Estados de Surtidores'
+
+    def __str__(self):
+        return f"Isla {self.lado.isla.numero} - Lado {self.lado.lado} - {self.estado}"
+
+
+class HistorialEstadoSurtidor(models.Model):
+    lado = models.ForeignKey(
+        Lado,
+        on_delete=models.CASCADE,
+        related_name='historial_estados'
+    )
+    estado_anterior = models.CharField(max_length=20)
+    estado_nuevo = models.CharField(max_length=20)
+    descripcion = models.TextField(blank=True, null=True)
+    cambiado_por = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='cambios_estado'
+    )
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'historial_estados_surtidores'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"Isla {self.lado.isla.numero} - Lado {self.lado.lado}: {self.estado_anterior} → {self.estado_nuevo}"

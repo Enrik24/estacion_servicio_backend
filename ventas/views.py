@@ -56,23 +56,28 @@ class IslaViewSet(viewsets.ModelViewSet):
 
 
 class LadoViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestionar lados de islas con referencia a su isla."""
     queryset = Lado.objects.select_related('isla').all()
     serializer_class = LadoSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'surtidores.ver'
+
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
-            return Lado.objects.select_related('isla').all()
-        if user.empresa:
+            qs = Lado.objects.select_related('isla').all()
+        elif user.empresa:
             qs = Lado.objects.select_related('isla').filter(isla__sucursal__empresa=user.empresa)
             if user.sucursal:
                 qs = qs.filter(isla__sucursal=user.sucursal)
-            return qs
-        return Lado.objects.none()
+        else:
+            return Lado.objects.none()
 
+        # Filtrar por isla si viene en query params
+        isla_id = self.request.query_params.get('isla')
+        if isla_id:
+            qs = qs.filter(isla_id=isla_id)
 
+        return qs
 class TipoCombustibleViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar tipos de combustible activos."""
     queryset = TipoCombustible.objects.filter(activo=True)
@@ -376,9 +381,17 @@ class VentaViewSet(viewsets.ModelViewSet):
         except Lado.DoesNotExist:
             return Response({'error': 'Lado no válido para tu isla asignada'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Verificar estado del surtidor
+        from monitoreo.models import EstadoSurtidor
+        estado_surtidor = EstadoSurtidor.objects.filter(lado=lado).first()
+        if estado_surtidor and estado_surtidor.estado != 'ACTIVO':
+            return Response(
+                {'error': f'El Lado {lado.lado} de la Isla {lado.isla.numero} está {estado_surtidor.estado}. No se puede registrar una venta.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         tipo_combustible = TipoCombustible.objects.get(id=data['tipo_combustible_id'])
         precio_unitario = tipo_combustible.precio_litro
-
         es_lleno = data.get('es_lleno', False)
 
         if es_lleno:
@@ -420,7 +433,19 @@ class VentaViewSet(viewsets.ModelViewSet):
             numero_comprobante=numero_comprobante,
             created_by=request.user
         )
-
+        # Descontar litros del tanque correspondiente
+        try:
+            from inventario.models import Tanque
+            tanque = Tanque.objects.filter(
+                sucursal=turno.isla.sucursal,
+                tipo_combustible=tipo_combustible,
+                activo=True
+            ).first()
+            if tanque and litros:
+                tanque.nivel_actual = max(0, float(tanque.nivel_actual) - float(litros))
+                tanque.save()
+        except Exception:
+            pass
         desc = f'Lleno - {tipo_combustible.get_tipo_display()}' if es_lleno else \
             f'Registró venta de {litros} Lt de {tipo_combustible.get_tipo_display()} - Bs. {total}'
 

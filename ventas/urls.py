@@ -16,7 +16,7 @@ router = DefaultRouter()
 # ViewSets para gestión de infraestructura
 router.register(r'islas', IslaViewSet, basename='isla')
 router.register(r'lados', LadoViewSet, basename='lado')
-router.register(r'tipos-combustible', TipoCombustibleViewSet, basename='tipo-combustible')
+router.register(r'tipo-combustible', TipoCombustibleViewSet, basename='tipo-combustible')
 router.register(r'sucursales', SucursalViewSet, basename='sucursal')
 
 # ViewSets para gestión de operaciones

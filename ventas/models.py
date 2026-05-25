@@ -38,8 +38,8 @@ class Sucursal(models.Model):
     cantidad_islas = models.IntegerField(default=1)
     tiene_gnv = models.BooleanField(default=False)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVA')
-    latitud = models.DecimalField(max_digits=10, decimal_places=7, blank=True, null=True)
-    longitud = models.DecimalField(max_digits=10, decimal_places=7, blank=True, null=True)
+    latitud = models.DecimalField(max_digits=11, decimal_places=8, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=11, decimal_places=8, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -60,7 +60,7 @@ class Isla(models.Model):
     ]
 
     id = models.BigAutoField(primary_key=True)
-    numero = models.IntegerField(unique=True)
+    numero = models.IntegerField()
     estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVO')
     descripcion = models.CharField(max_length=150, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -77,9 +77,11 @@ class Isla(models.Model):
         verbose_name = 'Isla'
         verbose_name_plural = 'Islas'
         ordering = ['numero']
+        unique_together = ['numero', 'sucursal']
 
     def __str__(self):
-        return f"Isla {self.numero}"
+        suc_name = self.sucursal.nombre if self.sucursal else "S/N"
+        return f"Isla {self.numero} - {suc_name}"
 
 class Lado(models.Model):
     LADOS = [

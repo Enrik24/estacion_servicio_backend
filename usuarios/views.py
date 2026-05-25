@@ -341,6 +341,8 @@ def login_view(request):
                 'id': user.id,
                 'email': user.email,
                 'nombre': user.nombre,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
                 'roles': roles_ids,
                 'roles_detalle': roles_detalle,
             }

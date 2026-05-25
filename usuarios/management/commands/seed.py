@@ -11,6 +11,8 @@ class Command(BaseCommand):
     help = 'Seeder para permisos, roles y usuarios iniciales de la gasolinera'
 
     def handle(self, *args, **kwargs):
+        # Establecer semilla para que el seed sea determinista y facilite la idempotencia
+        random.seed(42)
         self.stdout.write(self.style.NOTICE('Iniciando seed...'))
 
         # ── Permisos ──────────────────────────────────────────────────────────
@@ -515,11 +517,14 @@ class Command(BaseCommand):
                     )
                     fecha_cierre = fecha_apertura + timedelta(hours=8)
 
-                    # Verificar si ya existe un turno para esta isla, horario y fecha aproximada
+                    # Verificar si ya existe un turno para esta isla, horario y fecha
+                    # Usamos year, month, day para evitar discrepancias por zona horaria en el lookup __date
                     turno = Turno.objects.filter(
                         isla=isla,
                         horario=horario,
-                        fecha_apertura__date=fecha_apertura.date()
+                        fecha_apertura__year=fecha_apertura.year,
+                        fecha_apertura__month=fecha_apertura.month,
+                        fecha_apertura__day=fecha_apertura.day
                     ).first()
 
                     if not turno:

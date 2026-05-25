@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from seguridad.models import Bitacora
+from seguridad.models import Bitacora , registrar_bitacora
 
 
 def registrar_bitacora(request, accion, descripcion, estado='EXITO'):
@@ -17,18 +17,12 @@ def registrar_bitacora(request, accion, descripcion, estado='EXITO'):
             usuario_rol = request.user.nombre_rol
         except Exception:
             pass
-        Bitacora.objects.create(
-            usuario=request.user,
-            usuario_email=request.user.email,
-            usuario_nombre=request.user.nombre,
-            usuario_rol=usuario_rol,
+        registrar_bitacora(
+            request,
             accion=accion,
-            estado=estado,
-            modulo_afectado='Backup',
+            modulo='Backup',
             descripcion=descripcion,
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
-        )
+        )   
     except Exception:
         pass
 
@@ -107,6 +101,8 @@ def restaurar_backup(request):
     if 'error' in line.lower() 
     and 'event trigger' not in line.lower()
     and 'already exists' not in line.lower()
+    and 'duplicate key' not in line.lower()
+    and 'multiple primary keys' not in line.lower()
     and line.strip() != ''
 ]
 

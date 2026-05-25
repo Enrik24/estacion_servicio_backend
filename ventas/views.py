@@ -12,6 +12,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
+
+# Funciones para anotaciones y reemplazos en consultas
+from django.db.models import Value
+from django.db.models.functions import Replace
+
+# Importar modelos necesarios para la gestión de clientes y vehículos
+from rest_framework.permissions import AllowAny
+
 import uuid
 import re
 
@@ -536,6 +544,48 @@ class VehiculoViewSet(GenericViewSet):
             response_data['credenciales'] = credenciales
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def verificar_placa_lpr(self, request):
+        """
+        Endpoint exclusivo para ser consumido por el script de la cámara (IoT).
+        Recibe un JSON con la placa y devuelve los datos asociados.
+        """
+        # 2. Limpiamos la placa que llega desde la cámara (por si acaso)
+        placa_buscada = request.data.get('placa', '').upper().strip()
+        placa_limpia = placa_buscada.replace('-', '').replace(' ', '')
+
+        if not placa_limpia:
+            return Response({'error': 'No se proporcionó una placa'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 3. LA MAGIA: Le decimos a Django que quite los guiones y espacios 
+            # de la columna 'placa' de la Base de Datos antes de comparar
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(Replace('placa', Value('-'), Value('')), Value(' '), Value(''))
+            ).select_related('cliente').get(placa_normalizada=placa_limpia)
+            
+            cliente = vehiculo.cliente
+
+            return Response({
+                "encontrado": True,
+                "vehiculo": {
+                    "placa": vehiculo.placa, # Devolverá el formato original de la BD (ej. 1234-ABC)
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo
+                },
+                "cliente": {
+                    "nombre": cliente.nombre,
+                    "nit": getattr(cliente, 'nit', 'S/N')
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "mensaje": "Vehículo foráneo. No registrado en el sistema."
+            }, status=status.HTTP_200_OK)
+        
 class SucursalViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sucursales con creación automática de islas y lados."""
     queryset = Sucursal.objects.all()

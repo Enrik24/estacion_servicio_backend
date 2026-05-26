@@ -53,8 +53,23 @@ class EstadoSurtidor(models.Model):
         related_name='despachos_remotos_actuales',
         help_text="Usuario dueño de la compra online activa"
     )
-    # =========================================================================
 
+    # =========================================================================
+    # MÉTODO DE NEGOCIO PARA CU 14 - LIMPIEZA DE DATOS POST-DESPACHO
+    # =========================================================================
+    def liberar_surtidor_post_despacho(self):
+        """
+        Limpia los datos transitorios inyectados por la IA (CU 14) 
+        y devuelve el surtidor a estado disponible para el siguiente auto.
+        """
+        self.estado = 'ACTIVO'
+        self.placa_activa = None
+        self.monto_autorizado = 0.00
+        self.cliente_activo = None
+        self.descripcion_falla = None
+        self.save()
+
+    # =========================================================================
 
     class Meta:
         db_table = 'estados_surtidores'

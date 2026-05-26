@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     
     # Local apps
@@ -96,7 +97,9 @@ ASGI_APPLICATION = 'backend.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-USE_SQLITE = config('USE_SQLITE', default=False, cast=bool)
+
+USE_SQLITE = config('USE_SQLITE', default=True, cast=bool)
+
 
 if USE_SQLITE:
     DATABASES = {

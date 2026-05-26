@@ -7,11 +7,16 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
+
+from django.contrib.auth.password_validation import validate_password
 from django.core.mail import send_mail
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Usuario, Rol, Permiso, PasswordResetToken, LimiteConsumo
+from .models import Usuario, Rol, Permiso, PasswordResetToken, LimiteConsumo, EmailVerificationToken
 from .serializers import (
     UsuarioSerializer, UsuarioMeSerializer, RolSerializer,
     PermisoSerializer, CambiarPasswordSerializer, LimiteConsumoSerializer,
@@ -20,6 +25,8 @@ from .serializers import (
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora
+
+from ventas.client_linking import resolve_cliente_for_usuario
 
 
 
@@ -34,6 +41,67 @@ def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None):
         ip_address=getattr(request, 'ip_address', None),
         user_agent=getattr(request, 'user_agent', '')[:500]
     )
+
+
+
+def _parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {'true', '1', 'si', 'sí', 'yes', 'on'}
+    return False
+
+
+def _mask_email(email):
+    if not email or '@' not in email:
+        return email
+    local, domain = email.split('@', 1)
+    if len(local) <= 2:
+        masked_local = local[0] + '*'
+    else:
+        masked_local = local[:2] + '*' * max(1, len(local) - 2)
+    return f'{masked_local}@{domain}'
+
+
+def _ensure_cliente_para_usuario(usuario):
+    return resolve_cliente_for_usuario(usuario, create_if_missing=True)
+
+
+def _send_verification_email(usuario, verification_token):
+    verification_link = f"{settings.FRONTEND_URL}/verify-account/{verification_token.token}"
+    asunto = "Verifica tu cuenta - SurtidorBolivia"
+    cuerpo = (
+        f"Hola {usuario.nombre},\n\n"
+        f"Tu cuenta fue creada correctamente. Para activar el acceso debes verificar tu correo.\n\n"
+        f"Haz clic en el siguiente enlace:\n"
+        f"{verification_link}\n\n"
+        f"Este enlace expira en 24 horas y solo puede usarse una vez.\n\n"
+        f"Si no creaste esta cuenta, ignora este mensaje.\n\n"
+        f"— Equipo SurtidorBolivia"
+    )
+    send_mail(
+        subject=asunto,
+        message=cuerpo,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[usuario.email],
+        fail_silently=False,
+    )
+    return verification_link
+
+
+def _verification_response(usuario, verification_token):
+    response_data = {
+        'id': usuario.id,
+        'nombre': usuario.nombre,
+        'email': usuario.email,
+        'email_mascara': _mask_email(usuario.email),
+        'verification_required': True,
+        'mensaje': 'Cuenta creada. Revisa tu correo para verificarla antes de iniciar sesión.',
+    }
+    if settings.DEBUG:
+        response_data['verification_token'] = str(verification_token.token)
+        response_data['verification_url'] = f"{settings.FRONTEND_URL}/verify-account/{verification_token.token}"
+    return response_data
 
 # CRUD USUARIOS
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -311,6 +379,28 @@ def login_view(request):
             )
             return Response({'error': 'Usuario inactivo'}, status=status.HTTP_403_FORBIDDEN)
 
+        if not user.email_verificado:
+            Bitacora.objects.create(
+                usuario=user,
+                usuario_email=user.email,
+                usuario_nombre=user.nombre,
+                usuario_rol=nombres_del_rol,
+                accion='LOGIN',
+                estado='ERROR',
+                modulo_afectado='Administración y Seguridad',
+                descripcion='Intento de inicio de sesión con cuenta pendiente de verificación.',
+                ip_address=getattr(request, 'ip_address', None),
+                user_agent=getattr(request, 'user_agent', '')[:500]
+            )
+            return Response(
+                {
+                    'error': 'Debes verificar tu cuenta antes de iniciar sesión.',
+                    'verification_required': True,
+                    'email_mascara': _mask_email(user.email),
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         refresh = RefreshToken.for_user(user)
 
         Bitacora.objects.create(
@@ -365,20 +455,32 @@ def login_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def logout_view(request):
-    Bitacora.objects.create(
-        usuario=request.user,
-        usuario_email=request.user.email,
-        usuario_nombre=request.user.nombre,
-        usuario_rol=request.user.nombre_rol,
-        accion='LOGOUT',
-        estado='EXITO',
-        modulo_afectado='Administración y Seguridad',
-        descripcion='Cierre de sesión exitoso',
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500]
-    )
+    # Intentar blacklistear el refresh token si se envía en el body
+    refresh_token = request.data.get('refresh')
+    if refresh_token:
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception:
+            pass  # Token inválido o ya en blacklist — no bloquear el logout
+
+    # Registrar en bitácora solo si el usuario está autenticado
+    if request.user and request.user.is_authenticated:
+        Bitacora.objects.create(
+            usuario=request.user,
+            usuario_email=request.user.email,
+            usuario_nombre=request.user.nombre,
+            usuario_rol=request.user.nombre_rol,
+            accion='LOGOUT',
+            estado='EXITO',
+            modulo_afectado='Administración y Seguridad',
+            descripcion='Cierre de sesión exitoso',
+            ip_address=getattr(request, 'ip_address', None),
+            user_agent=getattr(request, 'user_agent', '')[:500]
+        )
+
     return Response({'mensaje': 'Sesión cerrada correctamente'})
 
 
@@ -547,11 +649,17 @@ def register_view(request):
     """
     POST /api/auth/register/
     Permite a un usuario registrarse sin autenticación.
-    No asigna roles — el administrador los asigna después.
+
+    Crea una cuenta de cliente pendiente de verificación por correo.
+
     """
     nombre = request.data.get('nombre', '').strip()
     email = request.data.get('email', '').strip().lower()
     password = request.data.get('password', '')
+
+    password_confirmacion = request.data.get('password_confirmacion', '')
+    acepta_politica_privacidad = _parse_bool(request.data.get('acepta_politica_privacidad', False))
+
 
     if not nombre or not email or not password:
         return Response(
@@ -559,41 +667,224 @@ def register_view(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+
     if len(password) < 8:
         return Response(
             {'error': 'La contraseña debe tener al menos 8 caracteres.'},
+        )
+    if len(nombre) < 2:
+        return Response(
+            {'error': 'El nombre debe tener al menos 2 caracteres.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if password != password_confirmacion:
+        return Response(
+            {'error': 'Las contraseñas no coinciden.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not acepta_politica_privacidad:
+        return Response(
+            {'error': 'Debes aceptar la política de privacidad para crear la cuenta.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        validate_email(email)
+    except DjangoValidationError:
+        return Response(
+            {'error': 'El correo electrónico no es válido.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
+        return Response(
+            {'error': ' '.join(exc.messages)},
+
             status=status.HTTP_400_BAD_REQUEST
         )
 
     if Usuario.objects.filter(email=email).exists():
+
+        Bitacora.objects.create(
+            usuario=None,
+            usuario_email=email,
+            usuario_nombre=nombre or 'Registro fallido',
+            usuario_rol='Sin rol',
+            accion='CREAR',
+            estado='ERROR',
+            modulo_afectado='Administración y Seguridad',
+            descripcion='Intento de registro rechazado por email duplicado.',
+            ip_address=getattr(request, 'ip_address', None),
+            user_agent=getattr(request, 'user_agent', '')[:500]
+        )
         return Response(
             {'error': 'El email ya está registrado.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    usuario = Usuario.objects.create(nombre=nombre, email=email)
-    usuario.set_password(password)
-    usuario.save()
+
+    try:
+        with transaction.atomic():
+            usuario = Usuario.objects.create(
+                nombre=nombre,
+                email=email,
+                email_verificado=False,
+                acepta_politica_privacidad_at=timezone.now(),
+            )
+            usuario.set_password(password)
+            usuario.save(update_fields=['password', 'email_verificado', 'acepta_politica_privacidad_at'])
+
+            rol_cliente = Rol.objects.filter(nombre__iexact='Cliente').first()
+            if rol_cliente:
+                usuario.roles.add(rol_cliente)
+
+            _ensure_cliente_para_usuario(usuario)
+            verification_token = EmailVerificationToken.objects.create(usuario=usuario)
+
+            email_enviado = True
+            try:
+                _send_verification_email(usuario, verification_token)
+            except Exception:
+                if settings.DEBUG:
+                    email_enviado = False
+                else:
+                    raise
+    except Exception:
+        Bitacora.objects.create(
+            usuario=None,
+            usuario_email=email,
+            usuario_nombre=nombre,
+            usuario_rol='Sin rol',
+            accion='CREAR',
+            estado='ERROR',
+            modulo_afectado='Administración y Seguridad',
+            descripcion='Falló el registro del cliente al generar o enviar la verificación de cuenta.',
+            ip_address=getattr(request, 'ip_address', None),
+            user_agent=getattr(request, 'user_agent', '')[:500]
+        )
+        return Response(
+            {'error': 'No se pudo completar el registro en este momento. Intenta nuevamente más tarde.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
     Bitacora.objects.create(
         usuario=usuario,
         usuario_email=usuario.email,
         usuario_nombre=usuario.nombre,
-        usuario_rol='Sin rol',
+
+        usuario_rol=usuario.nombre_rol,
         accion='CREAR',
         estado='EXITO',
         modulo_afectado='Administración y Seguridad',
-        descripcion='Nuevo usuario registrado mediante auto-registro.',
+        descripcion='Nuevo cliente registrado mediante auto-registro con verificación de cuenta pendiente.' if email_enviado else 'Nuevo cliente registrado en modo desarrollo; verificación pendiente con token generado localmente.',
         ip_address=getattr(request, 'ip_address', None),
         user_agent=getattr(request, 'user_agent', '')[:500]
     )
 
     return Response(
-        {
-            'id': usuario.id,
-            'nombre': usuario.nombre,
-            'email': usuario.email,
-        },
+        _verification_response(usuario, verification_token),
         status=status.HTTP_201_CREATED
     )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_account(request, token):
+    try:
+        verification_token = EmailVerificationToken.objects.select_related('usuario').get(token=token)
+    except EmailVerificationToken.DoesNotExist:
+        return Response(
+            {'error': 'Token de verificación inválido.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if not verification_token.is_valid():
+        return Response(
+            {'error': 'El enlace de verificación ha expirado o ya fue utilizado.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    usuario = verification_token.usuario
+    usuario.email_verificado = True
+    usuario.email_verificado_at = timezone.now()
+    usuario.save(update_fields=['email_verificado', 'email_verificado_at'])
+
+    verification_token.used = True
+    verification_token.save(update_fields=['used'])
+
+    Bitacora.objects.create(
+        usuario=usuario,
+        usuario_email=usuario.email,
+        usuario_nombre=usuario.nombre,
+        usuario_rol=usuario.nombre_rol,
+        accion='EDITAR',
+        estado='EXITO',
+        modulo_afectado='Administración y Seguridad',
+        descripcion='Cuenta de cliente verificada correctamente.',
+        ip_address=getattr(request, 'ip_address', None),
+        user_agent=getattr(request, 'user_agent', '')[:500]
+    )
+
+    return Response(
+        {'mensaje': 'Cuenta verificada correctamente. Ya puedes iniciar sesión.'},
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_verification_email(request):
+    email = request.data.get('email', '')
+    if isinstance(email, str):
+        email = email.strip().lower()
+
+    if not email:
+        return Response(
+            {'error': 'El campo email es requerido.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    usuario = Usuario.objects.filter(email=email).first()
+    if not usuario or usuario.email_verificado:
+        return Response(
+            {'mensaje': 'Si la cuenta existe y está pendiente, se enviará un nuevo enlace de verificación.'},
+            status=status.HTTP_200_OK
+        )
+
+    verification_token = EmailVerificationToken.objects.create(usuario=usuario)
+    try:
+        _send_verification_email(usuario, verification_token)
+        email_enviado = True
+    except Exception:
+        if not settings.DEBUG:
+            return Response(
+                {'error': 'No se pudo reenviar el correo de verificación. Intenta nuevamente más tarde.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        email_enviado = False
+
+    Bitacora.objects.create(
+        usuario=usuario,
+        usuario_email=usuario.email,
+        usuario_nombre=usuario.nombre,
+        usuario_rol=usuario.nombre_rol,
+        accion='EDITAR',
+        estado='EXITO',
+        modulo_afectado='Administración y Seguridad',
+        descripcion='Reenvío de verificación de cuenta solicitado.' if email_enviado else 'Reenvío de verificación generado localmente en modo desarrollo.',
+        ip_address=getattr(request, 'ip_address', None),
+        user_agent=getattr(request, 'user_agent', '')[:500]
+    )
+
+    response_data = {
+        'mensaje': 'Si la cuenta existe y está pendiente, se enviará un nuevo enlace de verificación.'
+    }
+    if settings.DEBUG:
+        response_data['verification_token'] = str(verification_token.token)
+        response_data['verification_url'] = f"{settings.FRONTEND_URL}/verify-account/{verification_token.token}"
+    return Response(response_data, status=status.HTTP_200_OK)
 asignar_roles.permiso_requerido = 'usuarios.asignar_roles'

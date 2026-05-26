@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
+from utils.onesignal import enviar_notificacion
 from ventas.models import Isla, Lado, Turno, Sucursal
 from usuarios.models import Usuario
 from seguridad.models import registrar_bitacora
@@ -121,7 +122,9 @@ class MonitoreoViewSet(viewsets.ViewSet):
         if nuevo_estado == 'ACTIVO' and estado_anterior == 'FALLA':
             estado_obj.fecha_resolucion = timezone.now()
         estado_obj.save()
-
+        if nuevo_estado == 'FALLA':
+            from utils.onesignal import notificar_falla_surtidor
+            notificar_falla_surtidor(lado, descripcion, request.user)
         registrar_bitacora(
             request,
             accion='EDITAR',
@@ -135,7 +138,6 @@ class MonitoreoViewSet(viewsets.ViewSet):
             'estado_anterior': estado_anterior,
             'estado_nuevo': nuevo_estado,
         })
-
     @action(detail=False, methods=['get'])
     def historial(self, request):
         """Retorna el historial de cambios de estado de surtidores."""

@@ -444,6 +444,10 @@ class VentaViewSet(viewsets.ModelViewSet):
             if tanque and litros:
                 tanque.nivel_actual = max(0, float(tanque.nivel_actual) - float(litros))
                 tanque.save()
+                # Notificar si nivel crítico
+            if tanque.en_alerta:
+                from utils.onesignal import notificar_nivel_critico
+                notificar_nivel_critico(tanque)
         except Exception:
             pass
         desc = f'Lleno - {tipo_combustible.get_tipo_display()}' if es_lleno else \

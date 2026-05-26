@@ -34,7 +34,7 @@ class Tanque(models.Model):
     @property
     def porcentaje_nivel(self):
         if self.capacidad_maxima > 0:
-            return round((self.nivel_actual / self.capacidad_maxima) * 100, 1)
+            return round((float(self.nivel_actual) / float(self.capacidad_maxima)) * 100, 1)
         return 0
 
     @property

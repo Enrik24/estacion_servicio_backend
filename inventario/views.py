@@ -79,7 +79,10 @@ class TanqueViewSet(viewsets.ModelViewSet):
                 registrado_por=request.user,
                 observaciones=observaciones,
             )
-
+         # Verificar si está en nivel crítico y notificar
+        if tanque.en_alerta:
+            from utils.onesignal import notificar_nivel_critico
+            notificar_nivel_critico(tanque)
         registrar_bitacora(
             request,
             accion='CREAR',

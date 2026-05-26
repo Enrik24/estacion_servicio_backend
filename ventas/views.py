@@ -724,6 +724,10 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
                 consolidado=False,
                 operador__empresa=user.empresa
             ).select_related('operador', 'isla', 'isla__sucursal', 'sucursal').prefetch_related('ventas')
+            # Filtrar por sucursal si es gerente
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                turnos_qs = turnos_qs.filter(isla__sucursal=user.sucursal)
         else:
             turnos_qs = Turno.objects.none()
 
@@ -745,28 +749,34 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermiso])
     def consolidar(self, request, pk=None):
-        """Consolida un turno específico marcándolo como consolidado y registrando en bitácora."""
         turno = Turno.objects.get(pk=pk)
-        
-        # Validar que el turno esté cerrado
+        user = request.user
+
+        # Verificar que el turno pertenece a la empresa del usuario
+        if not user.is_superuser:
+            if turno.operador.empresa != user.empresa:
+                return Response({'error': 'Sin permiso'}, status=403)
+            
+            # Si es gerente solo puede consolidar turnos de su sucursal
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                if turno.isla.sucursal != user.sucursal:
+                    return Response({'error': 'No puedes consolidar turnos de otra sucursal'}, status=403)
+
         if turno.estado != 'CERRADO':
             return Response(
                 {'error': 'Solo se pueden consolidar turnos cerrados'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Usar transacción atómica para asegurar integridad
+
         with transaction.atomic():
-            # Marcar turno como consolidado
             turno.consolidado = True
             turno.save()
-
-
             registrar_bitacora(
                 request,
                 accion='CREAR',
                 modulo='Venta y POS',
                 descripcion=f'Consolidación de Caja - Turno #{turno.id}',
             )
-        
+
         return Response({'mensaje': 'Turno consolidado correctamente'})

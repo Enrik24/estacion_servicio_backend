@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'reportes',
     'monitoreo',
     'inventario',
+    'django_crontab',
 ]
 
 MIDDLEWARE = [
@@ -216,3 +217,8 @@ ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
 ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
 DEFAULT_FROM_EMAIL = config('EMAIL_USER')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+CRONJOBS = [
+    ('0 2 * * *', 'backup.crons.backup_automatico', '>> /tmp/backup_cron.log 2>&1'),
+]
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY')

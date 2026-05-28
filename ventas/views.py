@@ -22,10 +22,13 @@ from rest_framework.permissions import AllowAny
 
 import uuid
 import re
+import requests # Para llamadas a la API de PlateRecognizer
 
 from usuarios import models
 from django.db.models import Max
 from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo,EmpresaCliente
+
+from backend.settings import TOKEN_PLATERECOGNIZER # Importar el token desde settings.py para usarlo en la función de procesamiento de imágenes
 
 from .serializers import (
     ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
@@ -656,7 +659,7 @@ class VehiculoViewSet(GenericViewSet):
         return Response(response_data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def verificar_placa_lpr(self, request):
+    def verificar_placa_lpr2(self, request):
         """
         Endpoint exclusivo para ser consumido por el script de la cámara (IoT).
         Recibe un JSON con la placa y devuelve los datos asociados.
@@ -732,6 +735,78 @@ class VehiculoViewSet(GenericViewSet):
             return Response({
                 "encontrado": False,
                 "mensaje": "Vehículo foráneo. No registrado en el sistema."
+            }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def procesar_imagen_lpr(self, request):
+        """
+        Recibe una imagen desde la cámara en pista, la envía a PlateRecognizer,
+        y devuelve los datos del vehículo si está registrado.
+        """
+        # 1. Verificar que la petición incluya una imagen
+        if 'upload' not in request.FILES:
+            return Response({'error': 'No se envió ninguna imagen (archivo "upload")'}, status=status.HTTP_400_BAD_REQUEST)
+
+        imagen = request.FILES['upload']
+        
+        # 2. Validar que el archivo sea una imagen (opcional pero recomendado)
+        if not imagen.content_type.startswith('image/'):
+            return Response({'error': 'El archivo enviado no es una imagen válida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 3. Enviar la imagen a la API de PlateRecognizer
+            response = requests.post(
+                'https://api.platerecognizer.com/v1/plate-reader/',
+                data=dict(regions='bo'),  # 'bo' le da la pista a la IA de que busque placas de Bolivia
+                files=dict(upload=imagen.read()),
+                headers={'Authorization': f'Token {TOKEN_PLATERECOGNIZER}'},
+                timeout=5 # Tiempo máximo de espera
+            )
+            
+            res_json = response.json()
+            
+            # 4. Validar si la IA encontró alguna placa en la foto
+            if not res_json.get('results'):
+                return Response({
+                    'encontrado': False, 
+                    'mensaje': 'La IA no detectó ninguna placa clara en la imagen.'
+                }, status=status.HTTP_200_OK)
+                
+            # Extraer la placa con mayor nivel de confianza
+            placa_detectada = res_json['results'][0]['plate'].upper()
+            
+            # 5. Lógica de Base de Datos (La que ya habíamos solucionado)
+            placa_limpia = placa_detectada.replace('-', '').replace(' ', '')
+            
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(Replace('placa', Value('-'), Value('')), Value(' '), Value(''))
+            ).select_related('cliente').get(placa_normalizada=placa_limpia)
+            
+            cliente = vehiculo.cliente
+
+            # 6. Respuesta Exitosa
+            return Response({
+                "encontrado": True,
+                "placa_leida_ia": placa_detectada,
+                "vehiculo": {
+                    "placa": vehiculo.placa,
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo
+                },
+                "cliente": {
+                    "nombre": cliente.nombre,
+                    "nit": getattr(cliente, 'nit', 'S/N')
+                }
+            }, status=status.HTTP_200_OK)
+
+        except requests.exceptions.RequestException as e:
+            return Response({'error': f'Error conectando con PlateRecognizer: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "placa_leida_ia": placa_detectada,
+                "mensaje": f"Placa {placa_detectada} detectada, pero es un Vehículo foráneo."
             }, status=status.HTTP_200_OK)
         
 class SucursalViewSet(viewsets.ModelViewSet):

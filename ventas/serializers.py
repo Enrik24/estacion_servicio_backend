@@ -252,9 +252,13 @@ class RegistrarClienteVehiculoSerializer(serializers.Serializer):
         return value    
 
 class SucursalSerializer(serializers.ModelSerializer):
-    """Serializador para sucursales con conteo de islas creadas."""
     cantidad_islas_creadas = serializers.SerializerMethodField()
-
+    gerente = serializers.SerializerMethodField()
+    tipos_combustible = serializers.PrimaryKeyRelatedField(
+        queryset=TipoCombustible.objects.all(),
+        many=True,
+        required=False
+    )
     class Meta:
         model = Sucursal
         fields = '__all__'
@@ -262,6 +266,21 @@ class SucursalSerializer(serializers.ModelSerializer):
     def get_cantidad_islas_creadas(self, obj):
         return obj.islas.count()
 
+    def get_gerente(self, obj):
+        from usuarios.models import Usuario
+        gerente = Usuario.objects.filter(
+            sucursal=obj,
+            roles__nombre__iexact='Gerente'
+        ).first()
+        if gerente:
+            return {'id': gerente.id, 'nombre': gerente.nombre}
+        gerente = Usuario.objects.filter(
+            sucursal=obj,
+            roles__nombre__iexact='Gerente/Dueño'
+        ).first()
+        if gerente:
+            return {'id': gerente.id, 'nombre': gerente.nombre}
+        return None  
 
 # TICKET
 class TicketVentaSerializer(serializers.ModelSerializer):

@@ -15,7 +15,7 @@ import requests
 
 from ventas.models import Venta, Turno, Sucursal, Isla
 from utils.permissions import HasPermiso
-from seguridad.models import Bitacora
+from seguridad.models import Bitacora,registrar_bitacora
 
 # Clase pre-configurada compatible con @permission_classes
 ReportesPermiso = partial(HasPermiso, permiso='reportes.ver')
@@ -47,29 +47,13 @@ def _filtrar_ventas(params):
     return qs
 
 
-def _registrar_bitacora(request, descripcion):
-    """Registra una consulta de reporte en la bitácora."""
-    Bitacora.objects.create(
-        usuario=request.user,
-        usuario_email=request.user.email,
-        usuario_nombre=request.user.nombre,
-        usuario_rol=request.user.nombre_rol,
-        accion='CONSULTAR',
-        estado='EXITO',
-        modulo_afectado='Reportes',
-        descripcion=descripcion,
-        ip_address=getattr(request, 'ip_address', None),
-        user_agent=getattr(request, 'user_agent', '')[:500],
-    )
-
-
 # ── Reporte de Ventas ─────────────────────────────────────────────────────────
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, ReportesPermiso])
 def reporte_ventas(request):
-
     qs = _filtrar_ventas(request.query_params)
-
+    if not request.user.is_superuser and request.user.empresa:
+        qs = qs.filter(turno__operador__empresa=request.user.empresa)
     # Totales generales
     totales = qs.aggregate(
         total_recaudado=Coalesce(Sum('total'), Decimal('0')),
@@ -118,7 +102,7 @@ def reporte_ventas(request):
                 .annotate(cantidad=Count('id'))
     )
 
-    _registrar_bitacora(request, 'Consultó reporte de ventas')
+    registrar_bitacora(request, accion='CONSULTAR', modulo='Reportes', descripcion='Consultó reporte de ventas')
 
     return Response({
         'resumen': {
@@ -138,6 +122,8 @@ def reporte_ventas(request):
 def reporte_turnos(request):
 
     qs = Turno.objects.select_related('operador', 'isla')
+    if not request.user.is_superuser and request.user.empresa:
+        qs = qs.filter(operador__empresa=request.user.empresa)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -192,7 +178,7 @@ def reporte_turnos(request):
             'total_recaudado': total,
         })
 
-    _registrar_bitacora(request, 'Consultó reporte de turnos')
+    registrar_bitacora(request, accion='CONSULTAR', modulo='Reportes', descripcion='Consultó reporte de turnos')
 
     return Response({
         'turnos':      turnos_data,
@@ -206,6 +192,8 @@ def reporte_turnos(request):
 def reporte_clientes(request):
 
     qs = Venta.objects.filter(estado='COMPLETADA', cliente__isnull=False)
+    if not request.user.is_superuser and request.user.empresa:
+        qs = qs.filter(turno__operador__empresa=request.user.empresa)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -249,7 +237,7 @@ def reporte_clientes(request):
         item['cliente_id']     = item.pop('cliente__id')
         item['cliente_nombre'] = item.pop('cliente__nombre')
 
-    _registrar_bitacora(request, 'Consultó reporte de clientes')
+    registrar_bitacora(request, accion='CONSULTAR', modulo='Reportes', descripcion='Consultó reporte de clientes')
 
     return Response({
         'ranking_clientes':  ranking,
@@ -263,6 +251,8 @@ def reporte_clientes(request):
 def reporte_sucursales(request):
 
     sucursales_qs = Sucursal.objects.all()
+    if not request.user.is_superuser and request.user.empresa:
+        sucursales_qs = sucursales_qs.filter(empresa=request.user.empresa)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -304,7 +294,7 @@ def reporte_sucursales(request):
             'cantidad_turnos': cantidad_turnos,
         })
 
-    _registrar_bitacora(request, 'Consultó reporte de sucursales')
+    registrar_bitacora(request, accion='CONSULTAR', modulo='Reportes', descripcion='Consultó reporte de sucursales')
 
     return Response({'sucursales': data})
 
@@ -315,6 +305,8 @@ def reporte_sucursales(request):
 def reporte_islas(request):
 
     islas_qs = Isla.objects.prefetch_related('lados').select_related('sucursal')
+    if not request.user.is_superuser and request.user.empresa:
+        islas_qs = islas_qs.filter(sucursal__empresa=request.user.empresa)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -372,7 +364,7 @@ def reporte_islas(request):
 
     isla_top = max(data, key=lambda x: x['total_recaudado'], default=None)
 
-    _registrar_bitacora(request, 'Consultó reporte de islas y lados')
+    registrar_bitacora(request, accion='CONSULTAR', modulo='Reportes', descripcion= 'Consultó reporte de islas y lados')
 
     return Response({
         'islas':    data,
@@ -498,7 +490,7 @@ JSON:"""
             status=422,
         )
 
-    _registrar_bitacora(request, f'Interpretó comando de voz: "{texto[:100]}"')
+    registrar_bitacora(request, f'Interpretó comando de voz: "{texto[:100]}"')
 
     return Response(resultado)
 

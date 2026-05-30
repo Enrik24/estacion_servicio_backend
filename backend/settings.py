@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     'ventas',
     'reportes',
     'backup',
-
+    'monitoreo',
+    'inventario',
 ]
 
 MIDDLEWARE = [
@@ -216,5 +217,8 @@ EMAIL_TIMEOUT = 20
 
 EMAIL_HOST_USER = config('EMAIL_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_PASS')
+# OneSignal
+ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
+ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
 DEFAULT_FROM_EMAIL = config('EMAIL_USER')
 FRONTEND_URL = config('FRONTEND_URL')

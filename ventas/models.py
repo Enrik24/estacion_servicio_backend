@@ -14,15 +14,22 @@ class TipoCombustible(models.Model):
     ]
 
     id = models.BigAutoField(primary_key=True)
-    tipo = models.CharField(max_length=30, choices=TIPOS, unique=True)
+    tipo = models.CharField(max_length=30, choices=TIPOS)
     precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
     activo = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='tipos_combustible'
+    )
     class Meta:
         db_table = 'tipos_combustible'
         verbose_name = 'Tipo de Combustible'
         verbose_name_plural = 'Tipos de Combustible'
+        unique_together = ['tipo', 'empresa']
 
     def __str__(self):
         return f"{self.get_tipo_display()} - Bs. {self.precio_litro}/Lt"
@@ -41,12 +48,21 @@ class Sucursal(models.Model):
     cantidad_islas = models.IntegerField(default=1)
     tiene_gnv = models.BooleanField(default=False)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='ACTIVA')
-    latitud = models.DecimalField(max_digits=11, decimal_places=8, blank=True, null=True)
-    longitud = models.DecimalField(max_digits=11, decimal_places=8, blank=True, null=True)
-
+    latitud = models.DecimalField(max_digits=18, decimal_places=15, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=18, decimal_places=15, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.CASCADE,
+   
+    )
+    tipos_combustible = models.ManyToManyField(
+        'TipoCombustible',
+        blank=True,
+        related_name='sucursales'
+    )
     class Meta:
         db_table = 'sucursales'
         verbose_name = 'Sucursal'
@@ -81,7 +97,9 @@ class Isla(models.Model):
         verbose_name = 'Isla'
         verbose_name_plural = 'Islas'
         ordering = ['numero']
-        unique_together = ['numero', 'sucursal']
+
+        unique_together = ['sucursal', 'numero']  
+
 
     def __str__(self):
         suc_name = self.sucursal.nombre if self.sucursal else "S/N"
@@ -167,7 +185,13 @@ class Cliente(models.Model):
     saldo_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='clientes'
+    )
     class Meta:
         db_table = 'clientes'
         verbose_name = 'Cliente'
@@ -231,6 +255,20 @@ class Venta(models.Model):
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
     
+class EmpresaCliente(models.Model):
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.CASCADE,
+        related_name='empresa_clientes'
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='empresa_clientes'
+    )
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
 
 
 class CompraCombustible(models.Model):
@@ -253,3 +291,26 @@ class CompraCombustible(models.Model):
     def __str__(self):
         return f"Compra {self.id} - {self.tipo_combustible.get_tipo_display()} - Bs. {self.total}"
 
+
+class EmpresaCliente(models.Model):
+    empresa = models.ForeignKey(
+        'usuarios.Empresa',
+        on_delete=models.CASCADE,
+        related_name='empresa_clientes'
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='empresa_clientes'
+    )
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'empresa_clientes'
+        unique_together = ['empresa', 'cliente']
+        verbose_name = 'Cliente de Empresa'
+        verbose_name_plural = 'Clientes de Empresas'
+
+    def __str__(self):
+        return f"{self.cliente.nombre} - {self.empresa.nombre}"

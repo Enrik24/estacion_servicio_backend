@@ -1,13 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-
     UsuarioViewSet, RolViewSet, PermisoViewSet,
     login_view, logout_view, asignar_roles,
     request_password_reset, reset_password,
     verify_account, resend_verification_email,
     register_view, ClienteViewSet,
-    LimiteConsumoViewSet, login_view, logout_view, asignar_roles
+    LimiteConsumoViewSet, login_view, logout_view, asignar_roles,EmpresaViewSet
 )
 from .predicciones_views import PrediccionConsumoAPIView
 
@@ -17,6 +16,7 @@ router.register(r'clientes', ClienteViewSet, basename='clientes')
 router.register(r'roles', RolViewSet)
 router.register(r'permisos', PermisoViewSet)
 router.register(r'limites-consumo', LimiteConsumoViewSet, basename='limites-consumo')
+router.register(r'empresas', EmpresaViewSet, basename='empresas')
 
 urlpatterns = [
     path('', include(router.urls)),

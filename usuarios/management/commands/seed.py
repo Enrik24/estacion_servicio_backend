@@ -1,280 +1,353 @@
 from django.core.management.base import BaseCommand
-from usuarios.models import Permiso, Rol, Usuario
-from ventas.models import Isla, Lado, TipoCombustible
+from usuarios.models import Permiso, Rol, Usuario, Empresa
+from ventas.models import Isla, Lado, TipoCombustible, Sucursal, Cliente, Vehiculo, EmpresaCliente
 
 
 class Command(BaseCommand):
-    help = 'Seeder para permisos, roles y usuarios iniciales de la gasolinera'
+    help = 'Seeder principal del sistema'
 
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.NOTICE('Iniciando seed...'))
 
+        # ── Permisos ──────────────────────────────────────────────────────────
         permisos_data = [
-            # Usuarios
-            {'codigo': 'usuarios.ver', 'nombre': 'Ver usuarios', 'descripcion': 'Ver lista de usuarios'},
-            {'codigo': 'usuarios.crear', 'nombre': 'Crear usuarios', 'descripcion': 'Crear nuevos usuarios'},
-            {'codigo': 'usuarios.editar', 'nombre': 'Editar usuarios', 'descripcion': 'Editar usuarios existentes'},
-            {'codigo': 'usuarios.eliminar', 'nombre': 'Eliminar usuarios', 'descripcion': 'Eliminar usuarios'},
-            {'codigo': 'usuarios.asignar_roles', 'nombre': 'Asignar roles', 'descripcion': 'Asignar roles a usuarios'},
-
-            # Roles
-            {'codigo': 'roles.ver', 'nombre': 'Ver roles', 'descripcion': 'Ver lista de roles'},
-            {'codigo': 'roles.crear', 'nombre': 'Crear roles', 'descripcion': 'Crear nuevos roles'},
-            {'codigo': 'roles.editar', 'nombre': 'Editar roles', 'descripcion': 'Editar roles existentes'},
-            {'codigo': 'roles.eliminar', 'nombre': 'Eliminar roles', 'descripcion': 'Eliminar roles'},
-
-            # Permisos
-            {'codigo': 'permisos.ver', 'nombre': 'Ver permisos', 'descripcion': 'Ver lista de permisos'},
-            {'codigo': 'permisos.crear', 'nombre': 'Crear permisos', 'descripcion': 'Crear nuevos permisos'},
-            {'codigo': 'permisos.editar', 'nombre': 'Editar permisos', 'descripcion': 'Editar permisos existentes'},
-            {'codigo': 'permisos.eliminar', 'nombre': 'Eliminar permisos', 'descripcion': 'Eliminar permisos'},
-
-            # Bitacora
-            {'codigo': 'bitacora.ver', 'nombre': 'Ver bitácora', 'descripcion': 'Ver registro de auditoría'},
-
-            # Turnos
-            {'codigo': 'turnos.ver', 'nombre': 'Ver turnos', 'descripcion': 'Ver lista de turnos'},
-            {'codigo': 'turnos.abrir', 'nombre': 'Abrir turno', 'descripcion': 'Abrir un nuevo turno'},
-            {'codigo': 'turnos.cerrar', 'nombre': 'Cerrar turno', 'descripcion': 'Cerrar un turno abierto'},
-
-            # Ventas
-            {'codigo': 'ventas.ver', 'nombre': 'Ver ventas', 'descripcion': 'Ver registro de ventas'},
-            {'codigo': 'ventas.registrar', 'nombre': 'Registrar venta', 'descripcion': 'Registrar nuevas ventas'},
-            {'codigo': 'ventas.anular', 'nombre': 'Anular venta', 'descripcion': 'Anular ventas registradas'},
-
-            # Surtidores
-            {'codigo': 'surtidores.ver', 'nombre': 'Ver surtidores', 'descripcion': 'Ver lista de surtidores'},
-            {'codigo': 'surtidores.crear', 'nombre': 'Crear surtidores', 'descripcion': 'Crear nuevos surtidores'},
-            {'codigo': 'surtidores.editar', 'nombre': 'Editar surtidores', 'descripcion': 'Editar surtidores existentes'},
-            {'codigo': 'surtidores.eliminar', 'nombre': 'Eliminar surtidores', 'descripcion': 'Eliminar surtidores'},
-
-            # Clientes
-            {'codigo': 'clientes.ver', 'nombre': 'Ver clientes', 'descripcion': 'Ver lista de clientes'},
-            {'codigo': 'clientes.crear', 'nombre': 'Crear clientes', 'descripcion': 'Crear nuevos clientes'},
-            {'codigo': 'clientes.editar', 'nombre': 'Editar clientes', 'descripcion': 'Editar clientes existentes'},
-            {'codigo': 'clientes.eliminar', 'nombre': 'Eliminar clientes', 'descripcion': 'Eliminar clientes'},
-
-            # Sucursales
-            {'codigo': 'sucursales.ver', 'nombre': 'Ver sucursales', 'descripcion': 'Ver lista de sucursales'},
-            {'codigo': 'sucursales.crear', 'nombre': 'Crear sucursales', 'descripcion': 'Crear nuevas sucursales'},
-            {'codigo': 'sucursales.editar', 'nombre': 'Editar sucursales', 'descripcion': 'Editar sucursales existentes'},
-            {'codigo': 'sucursales.eliminar', 'nombre': 'Eliminar sucursales', 'descripcion': 'Eliminar sucursales'},
-            
-            # Permisos de facturas
-            {'codigo': 'ver.facturas', 'nombre': 'Ver Facturas', 'descripcion': 'Permiso para poder ver sus facturas'},
-            
-            # Permisos de bombas (gasolinera)
-            {'codigo': 'bombas.ver', 'nombre': 'Ver Bombas', 'descripcion': 'Permiso para ver bombas de combustible'},
-            {'codigo': 'bombas.crear', 'nombre': 'Crear Bombas', 'descripcion': 'Permiso para crear bombas de combustible'},
-            {'codigo': 'bombas.editar', 'nombre': 'Editar Bombas', 'descripcion': 'Permiso para editar bombas de combustible'},
-            {'codigo': 'bombas.eliminar', 'nombre': 'Eliminar Bombas', 'descripcion': 'Permiso para eliminar bombas de combustible'},
-            
-            # Permisos de combustibles
-            {'codigo': 'combustibles.ver', 'nombre': 'Ver Combustibles', 'descripcion': 'Permiso para ver tipos de combustible'},
-            {'codigo': 'combustibles.crear', 'nombre': 'Crear Combustibles', 'descripcion': 'Permiso para crear tipos de combustible'},
-            {'codigo': 'combustibles.editar', 'nombre': 'Editar Combustibles', 'descripcion': 'Permiso para editar tipos de combustible'},
-            {'codigo': 'combustibles.eliminar', 'nombre': 'Eliminar Combustibles', 'descripcion': 'Permiso para eliminar tipos de combustible'},
-            
-          
-            # Permisos de reportes
-            {'codigo': 'reportes.ver', 'nombre': 'Ver Reportes', 'descripcion': 'Permiso para ver reportes de la gasolinera'},
-
-            # Permisos de límites de consumo
-            {'codigo': 'limites_consumo.ver', 'nombre': 'Ver Límites de Consumo', 'descripcion': 'Permiso para ver límites de consumo'},
-            {'codigo': 'limites_consumo.crear', 'nombre': 'Crear Límites de Consumo', 'descripcion': 'Permiso para crear límites de consumo'},
-            {'codigo': 'limites_consumo.editar', 'nombre': 'Editar Límites de Consumo', 'descripcion': 'Permiso para editar límites de consumo'},
-            {'codigo': 'limites_consumo.eliminar', 'nombre': 'Eliminar Límites de Consumo', 'descripcion': 'Permiso para eliminar límites de consumo'},
-            {'codigo': 'limites_consumo.validar', 'nombre': 'Validar Consumo', 'descripcion': 'Permiso para validar consumos contra límites'},
+            {'codigo': 'usuarios.ver',          'nombre': 'Ver usuarios'},
+            {'codigo': 'usuarios.crear',         'nombre': 'Crear usuarios'},
+            {'codigo': 'usuarios.editar',        'nombre': 'Editar usuarios'},
+            {'codigo': 'usuarios.eliminar',      'nombre': 'Eliminar usuarios'},
+            {'codigo': 'usuarios.asignar_roles', 'nombre': 'Asignar roles'},
+            {'codigo': 'roles.ver',              'nombre': 'Ver roles'},
+            {'codigo': 'roles.crear',            'nombre': 'Crear roles'},
+            {'codigo': 'roles.editar',           'nombre': 'Editar roles'},
+            {'codigo': 'roles.eliminar',         'nombre': 'Eliminar roles'},
+            {'codigo': 'permisos.ver',           'nombre': 'Ver permisos'},
+            {'codigo': 'permisos.crear',         'nombre': 'Crear permisos'},
+            {'codigo': 'permisos.editar',        'nombre': 'Editar permisos'},
+            {'codigo': 'permisos.eliminar',      'nombre': 'Eliminar permisos'},
+            {'codigo': 'bitacora.ver',           'nombre': 'Ver bitácora'},
+            {'codigo': 'turnos.ver',             'nombre': 'Ver turnos'},
+            {'codigo': 'turnos.abrir',           'nombre': 'Abrir turno'},
+            {'codigo': 'turnos.cerrar',          'nombre': 'Cerrar turno'},
+            {'codigo': 'ventas.ver',             'nombre': 'Ver ventas'},
+            {'codigo': 'ventas.registrar',       'nombre': 'Registrar venta'},
+            {'codigo': 'ventas.anular',          'nombre': 'Anular venta'},
+            {'codigo': 'surtidores.ver',         'nombre': 'Ver surtidores'},
+            {'codigo': 'surtidores.crear',       'nombre': 'Crear surtidores'},
+            {'codigo': 'surtidores.editar',      'nombre': 'Editar surtidores'},
+            {'codigo': 'surtidores.eliminar',    'nombre': 'Eliminar surtidores'},
+            {'codigo': 'clientes.ver',           'nombre': 'Ver clientes'},
+            {'codigo': 'clientes.crear',         'nombre': 'Crear clientes'},
+            {'codigo': 'clientes.editar',        'nombre': 'Editar clientes'},
+            {'codigo': 'clientes.eliminar',      'nombre': 'Eliminar clientes'},
+            {'codigo': 'sucursales.ver',         'nombre': 'Ver sucursales'},
+            {'codigo': 'sucursales.crear',       'nombre': 'Crear sucursales'},
+            {'codigo': 'sucursales.editar',      'nombre': 'Editar sucursales'},
+            {'codigo': 'sucursales.eliminar',    'nombre': 'Eliminar sucursales'},
+            {'codigo': 'reportes.ver',           'nombre': 'Ver reportes'},
+            {'codigo': 'backup.crear',           'nombre': 'Crear backup'},
+            {'codigo': 'backup.restaurar',       'nombre': 'Restaurar backup'},
+            {'codigo': 'limites_consumo.ver',    'nombre': 'Ver límites de consumo'},
+            {'codigo': 'limites_consumo.crear',  'nombre': 'Crear límites de consumo'},
+            {'codigo': 'limites_consumo.editar', 'nombre': 'Editar límites de consumo'},
+            {'codigo': 'limites_consumo.eliminar','nombre': 'Eliminar límites de consumo'},
+            {'codigo': 'limites_consumo.validar','nombre': 'Validar consumo'},
         ]
 
         permisos_creados = {}
-        for permiso_data in permisos_data:
-            permiso, created = Permiso.objects.get_or_create(
-                codigo=permiso_data['codigo'],
-                defaults={
-                    'nombre': permiso_data['nombre'],
-                    'descripcion': permiso_data['descripcion']
-                }
+        for p in permisos_data:
+            obj, created = Permiso.objects.get_or_create(
+                codigo=p['codigo'],
+                defaults={'nombre': p['nombre'], 'descripcion': p['nombre']}
             )
-            permisos_creados[permiso_data['codigo']] = permiso
+            permisos_creados[p['codigo']] = obj
             if created:
-                self.stdout.write(self.style.SUCCESS(f'  Permiso creado: {permiso.codigo}'))
-            else:
-                self.stdout.write(f'  Permiso ya existe: {permiso.codigo}')
+                self.stdout.write(self.style.SUCCESS(f'  Permiso creado: {p["codigo"]}'))
 
-        # Roles
-        todos_los_permisos = list(permisos_creados.values())
+        # ── Roles ─────────────────────────────────────────────────────────────
+        todos = list(permisos_creados.values())
 
-        permisos_operador = [
-            permisos_creados.get('turnos.ver'),
-            permisos_creados.get('turnos.abrir'),
-            permisos_creados.get('turnos.cerrar'),
-            permisos_creados.get('ventas.ver'),
-            permisos_creados.get('ventas.registrar'),
-            permisos_creados.get('ventas.anular'),
-            permisos_creados.get('surtidores.ver'),
-            permisos_creados.get('clientes.ver'),
-        ]
+        permisos_gerente = [permisos_creados.get(c) for c in [
+            'usuarios.ver', 'usuarios.crear', 'usuarios.editar', 'usuarios.asignar_roles',
+            'roles.ver', 'permisos.ver', 'bitacora.ver',
+            'turnos.ver', 'turnos.abrir', 'turnos.cerrar',
+            'ventas.ver', 'ventas.registrar', 'ventas.anular',
+            'surtidores.ver', 'surtidores.crear', 'surtidores.editar',
+            'clientes.ver', 'clientes.crear', 'clientes.editar',
+            'sucursales.ver', 'sucursales.editar', 'reportes.ver',
+            'limites_consumo.ver', 'limites_consumo.crear', 'limites_consumo.editar',
+        ]]
 
-        permisos_gerente = [
-            permisos_creados.get('usuarios.ver'),
-            permisos_creados.get('roles.ver'),
-            permisos_creados.get('permisos.ver'),
-            permisos_creados.get('bitacora.ver'),
-            permisos_creados.get('turnos.ver'),
-            permisos_creados.get('ventas.ver'),
-            permisos_creados.get('surtidores.ver'),
-            permisos_creados.get('clientes.ver'),
-            permisos_creados.get('sucursales.ver'),
-        ]
+        permisos_operador = [permisos_creados.get(c) for c in [
+            'turnos.ver', 'turnos.abrir', 'turnos.cerrar',
+            'ventas.ver', 'ventas.registrar', 'ventas.anular',
+            'surtidores.ver', 'clientes.ver', 'clientes.crear',
+        ]]
 
-        permisos_auditor = [
-            permisos_creados.get('bitacora.ver'),
-            permisos_creados.get('ventas.ver'),
-            permisos_creados.get('usuarios.ver'),
-            permisos_creados.get('turnos.ver'),
-        ]
+        permisos_auditor = [permisos_creados.get(c) for c in [
+            'bitacora.ver', 'ventas.ver', 'usuarios.ver',
+            'turnos.ver', 'clientes.ver', 'sucursales.ver',
+            'surtidores.ver', 'reportes.ver',
+        ]]
 
-        permisos_cliente = [
-            permisos_creados.get('ventas.ver'),
-            permisos_creados.get('clientes.ver'),
-        ]
+        permisos_cliente = [permisos_creados.get(c) for c in [
+            'ventas.ver', 'clientes.ver',
+        ]]
 
         roles_data = [
-            {
-                'nombre': 'Administrador',
-                'descripcion': 'Acceso total al sistema',
-                'permisos': todos_los_permisos
-            },
-            {
-                'nombre': 'Gerente',
-                'descripcion': 'Acceso a reportes y configuración',
-                'permisos': permisos_gerente
-            },
-            {
-                'nombre': 'Operador',
-                'descripcion': 'Registro de ventas y turnos',
-                'permisos': permisos_operador
-            },
-            {
-                'nombre': 'Auditor',
-                'descripcion': 'Solo lectura y bitácora',
-                'permisos': permisos_auditor
-            },
-            {
-                'nombre': 'Cliente',
-                'descripcion': 'Cliente de la estación de servicio',
-                'permisos': permisos_cliente
-            },
+            {'nombre': 'Administrador', 'descripcion': 'Acceso total al sistema', 'permisos': todos},
+            {'nombre': 'Gerente', 'descripcion': 'Gestión de sucursal', 'permisos': permisos_gerente},
+            {'nombre': 'Operador', 'descripcion': 'Registro de ventas y turnos', 'permisos': permisos_operador},
+            {'nombre': 'Auditor', 'descripcion': 'Solo lectura', 'permisos': permisos_auditor},
+            {'nombre': 'Cliente', 'descripcion': 'Cliente de la estación', 'permisos': permisos_cliente},
         ]
 
         roles_creados = {}
-        for rol_data in roles_data:
+        for r in roles_data:
             rol, created = Rol.objects.get_or_create(
-                nombre=rol_data['nombre'],
-                defaults={'descripcion': rol_data['descripcion']}
+                nombre=r['nombre'],
+                defaults={'descripcion': r['descripcion']}
             )
+            rol.permisos.set([p for p in r['permisos'] if p])
+            roles_creados[r['nombre']] = rol
             if created:
-                self.stdout.write(self.style.SUCCESS(f'  Rol creado: {rol.nombre}'))
-            else:
-                self.stdout.write(f'  Rol ya existe: {rol.nombre}')
+                self.stdout.write(self.style.SUCCESS(f'  Rol creado: {r["nombre"]}'))
 
-            permisos_validos = [p for p in rol_data['permisos'] if p is not None]
-            rol.permisos.set(permisos_validos)
-            roles_creados[rol_data['nombre']] = rol
+        # ── Super Admin del sistema ───────────────────────────────────────────
+        superadmin, created = Usuario.objects.get_or_create(
+            email='superadmin@surtidor.com',
+            defaults={'nombre': 'Super Admin', 'is_superuser': True, 'is_staff': True, 'is_active': True}
+        )
+        if created:
+            superadmin.set_password('super123')
+            superadmin.save()
+            self.stdout.write(self.style.SUCCESS('  Super Admin creado'))
 
-        # Usuarios base
+        # ── Empresa ───────────────────────────────────────────────────────────
+        empresa, created = Empresa.objects.get_or_create(
+            nombre='Surtidor Octano',
+            defaults={
+                'nit': '1000000001',
+                'telefono': '3-4567890',
+                'email': 'contacto@surtidoroctano.com',
+                'direccion': 'Santa Cruz de la Sierra',
+                'plan': 'PROFESIONAL',
+                'estado': 'ACTIVA',
+            }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS('  Empresa creada: Surtidor Octano'))
+
+        # ── Tipos de combustible ──────────────────────────────────────────────
+        tipos_data = [
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
+            {'tipo': 'GASOLINA_PREMIUM',  'precio_litro': 11.00},
+            {'tipo': 'DIESEL',            'precio_litro': 9.80},
+        ]
+
+        tipos_creados = {}
+        for t in tipos_data:
+            obj, created = TipoCombustible.objects.get_or_create(
+                tipo=t['tipo'],
+                empresa=empresa,
+                defaults={'precio_litro': t['precio_litro'], 'activo': True}
+            )
+            tipos_creados[t['tipo']] = obj
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {obj.get_tipo_display()}'))
+
+        # ── Sucursales ────────────────────────────────────────────────────────
+        sucursales_data = [
+            {
+                'nombre': 'Surtidor Octano - Norte',
+                'direccion': 'Av. Banzer 5to Anillo, Santa Cruz',
+                'telefono': '3-1234567',
+                'nit': '1000000002',
+                'cantidad_islas': 2,
+                'tiene_gnv': False,
+                'estado': 'ACTIVA',
+            },
+            {
+                'nombre': 'Surtidor Octano - Oeste',
+                'direccion': 'Av. Radial 13 6to Anillo, Santa Cruz',
+                'telefono': '3-7654321',
+                'nit': '1000000003',
+                'cantidad_islas': 2,
+                'tiene_gnv': False,
+                'estado': 'ACTIVA',
+            },
+        ]
+
+        sucursales_creadas = {}
+        for s in sucursales_data:
+            suc, created = Sucursal.objects.get_or_create(
+                nombre=s['nombre'],
+                defaults={**s, 'empresa': empresa}
+            )
+            if not created and not suc.empresa:
+                suc.empresa = empresa
+                suc.save()
+            sucursales_creadas[s['nombre']] = suc
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Sucursal creada: {suc.nombre}'))
+                # Crear islas y lados
+                for i in range(1, s['cantidad_islas'] + 1):
+                    isla = Isla.objects.create(numero=i, sucursal=suc, estado='ACTIVO')
+                    Lado.objects.create(isla=isla, lado='A', activo=True)
+                    Lado.objects.create(isla=isla, lado='B', activo=True)
+                    self.stdout.write(self.style.SUCCESS(f'    Isla {i} creada con lados A y B'))
+
+        suc_norte = sucursales_creadas.get('Surtidor Octano - Norte')
+        suc_oeste = sucursales_creadas.get('Surtidor Octano - Oeste')
+
+        # ── Usuarios ──────────────────────────────────────────────────────────
         usuarios_data = [
             {
                 'nombre': 'Administrador',
                 'email': 'admin@estacion.com',
                 'password': 'admin123',
-                'is_superuser': True,
+                'is_superuser': False,
                 'is_staff': True,
-                'rol': 'Administrador'
+                'rol': 'Administrador',
+                'empresa': empresa,
+                'sucursal': None,
             },
             {
-                'nombre': 'Operador Demo',
-                'email': 'operador@estacion.com',
+                'nombre': 'Gerente Norte',
+                'email': 'gerente.norte@estacion.com',
+                'password': 'gerente123',
+                'is_superuser': False,
+                'is_staff': True,
+                'rol': 'Gerente',
+                'empresa': empresa,
+                'sucursal': suc_norte,
+            },
+            {
+                'nombre': 'Gerente Oeste',
+                'email': 'gerente.oeste@estacion.com',
+                'password': 'gerente123',
+                'is_superuser': False,
+                'is_staff': True,
+                'rol': 'Gerente',
+                'empresa': empresa,
+                'sucursal': suc_oeste,
+            },
+            {
+                'nombre': 'Operador Norte',
+                'email': 'operador.norte@estacion.com',
                 'password': 'operador123',
                 'is_superuser': False,
                 'is_staff': False,
-                'rol': 'Operador'
+                'rol': 'Operador',
+                'empresa': empresa,
+                'sucursal': suc_norte,
+            },
+            {
+                'nombre': 'Operador Oeste',
+                'email': 'operador.oeste@estacion.com',
+                'password': 'operador123',
+                'is_superuser': False,
+                'is_staff': False,
+                'rol': 'Operador',
+                'empresa': empresa,
+                'sucursal': suc_oeste,
+            },
+            {
+                'nombre': 'Auditor Demo',
+                'email': 'auditor@estacion.com',
+                'password': 'auditor123',
+                'is_superuser': False,
+                'is_staff': False,
+                'rol': 'Auditor',
+                'empresa': empresa,
+                'sucursal': None,
             },
         ]
 
-        for usuario_data in usuarios_data:
-            email = usuario_data['email']
-            rol_nombre = usuario_data.pop('rol')
-            password = usuario_data.pop('password')
-
-            usuario, created = Usuario.objects.get_or_create(
-                email=email,
+        usuarios_creados = {}
+        for u in usuarios_data:
+            obj, created = Usuario.objects.get_or_create(
+                email=u['email'],
                 defaults={
-                    'nombre': usuario_data['nombre'],
-                    'is_superuser': usuario_data['is_superuser'],
-                    'is_staff': usuario_data['is_staff'],
-                    'is_active': True
+                    'nombre': u['nombre'],
+                    'is_superuser': u['is_superuser'],
+                    'is_staff': u['is_staff'],
+                    'is_active': True,
+                    'empresa': u['empresa'],
+                    'sucursal': u['sucursal'],
                 }
             )
-
             if created:
-                usuario.set_password(password)
-                usuario.save()
-                self.stdout.write(self.style.SUCCESS(f'  Usuario creado: {usuario.nombre} ({email})'))
-            else:
-                self.stdout.write(f'  Usuario ya existe: {usuario.nombre} ({email})')
-
-            rol = roles_creados.get(rol_nombre)
+                obj.set_password(u['password'])
+                obj.save()
+                self.stdout.write(self.style.SUCCESS(f'  Usuario creado: {obj.nombre}'))
+            rol = roles_creados.get(u['rol'])
             if rol:
-                usuario.roles.set([rol])
+                obj.roles.set([rol])
+            usuarios_creados[u['email']] = obj
 
-        self.stdout.write(self.style.SUCCESS('\nSeed completado exitosamente!'))
-        self.stdout.write(self.style.NOTICE('Credenciales:'))
-        self.stdout.write('  Admin:    admin@estacion.com / admin123')
-        self.stdout.write('  Operador: operador@estacion.com / operador123')
-
-        islas_data = [
-            {'numero': 1, 'descripcion': 'Isla 1'},
-            {'numero': 2, 'descripcion': 'Isla 2'},
-         ]
-
-        for isla_data in islas_data:
-            isla, created = Isla.objects.get_or_create(
-                numero=isla_data['numero'],
-                defaults={'descripcion': isla_data['descripcion'], 'estado': 'ACTIVO'}
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'  Isla creada: Isla {isla.numero}'))
-            else:
-                self.stdout.write(f'  Isla ya existe: Isla {isla.numero}')
-
-            # Crear lados A y B para cada isla
-            for lado in ['A', 'B']:
-                l, created = Lado.objects.get_or_create(
-                    isla=isla,
-                    lado=lado,
-                    defaults={'activo': True}
-                )
-                if created:
-                    self.stdout.write(self.style.SUCCESS(f'    Lado creado: Isla {isla.numero} - Lado {lado}'))
-                else:
-                    self.stdout.write(f'    Lado ya existe: Isla {isla.numero} - Lado {lado}')
-
-        # Crear tipos de combustible
-        tipos_data = [
-            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
-            {'tipo': 'GASOLINA_PREMIUM', 'precio_litro': 11.00},
-            {'tipo': 'DIESEL', 'precio_litro': 9.80},
-            {'tipo': 'GNV', 'precio_litro': 2.73},
+        # ── Clientes y Vehículos ──────────────────────────────────────────────
+        clientes_data = [
+            {
+                'nombre': 'Juan Pérez',
+                'nit': '12345678',
+                'telefono': '71234567',
+                'placa': '1234-ABC',
+                'marca': 'Toyota',
+                'modelo': 'Corolla',
+                'color': 'Blanco',
+            },
+            {
+                'nombre': 'María López',
+                'nit': '87654321',
+                'telefono': '76543210',
+                'placa': '5678-XYZ',
+                'marca': 'Nissan',
+                'modelo': 'Sentra',
+                'color': 'Rojo',
+            },
+            {
+                'nombre': 'Transportes Andes SRL',
+                'nit': '55566677',
+                'telefono': '44556677',
+                'placa': '9999-TRP',
+                'marca': 'Mercedes',
+                'modelo': 'Sprinter',
+                'color': 'Blanco',
+            },
         ]
 
-        for tipo_data in tipos_data:
-            tipo, created = TipoCombustible.objects.get_or_create(
-                tipo=tipo_data['tipo'],
-                defaults={'precio_litro': tipo_data['precio_litro'], 'activo': True}
+        for c in clientes_data:
+            cliente, created = Cliente.objects.get_or_create(
+                nit=c['nit'],
+                defaults={
+                    'nombre': c['nombre'],
+                    'telefono': c['telefono'],
+                    'activo': True,
+                }
             )
             if created:
-                self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {tipo.get_tipo_display()}'))
-            else:
-                self.stdout.write(f'  Combustible ya existe: {tipo.get_tipo_display()}')
+                self.stdout.write(self.style.SUCCESS(f'  Cliente creado: {cliente.nombre}'))
+                Vehiculo.objects.get_or_create(
+                    placa=c['placa'],
+                    defaults={
+                        'cliente': cliente,
+                        'marca': c['marca'],
+                        'modelo': c['modelo'],
+                        'color': c['color'],
+                        'activo': True,
+                    }
+                )
+                self.stdout.write(self.style.SUCCESS(f'    Vehículo creado: {c["placa"]}'))
+            # Asociar cliente a la empresa
+            EmpresaCliente.objects.get_or_create(empresa=empresa, cliente=cliente)
+
+        # ── Resumen ───────────────────────────────────────────────────────────
+        self.stdout.write(self.style.SUCCESS('\n✅ Seed completado exitosamente!'))
+        self.stdout.write(self.style.NOTICE('\nCredenciales:'))
+        self.stdout.write('  Super Admin:     superadmin@surtidor.com     / super123')
+        self.stdout.write('  Admin:           admin@estacion.com           / admin123')
+        self.stdout.write('  Gerente Norte:   gerente.norte@estacion.com   / gerente123')
+        self.stdout.write('  Gerente Oeste:   gerente.oeste@estacion.com   / gerente123')
+        self.stdout.write('  Operador Norte:  operador.norte@estacion.com  / operador123')
+        self.stdout.write('  Operador Oeste:  operador.oeste@estacion.com  / operador123')
+        self.stdout.write('  Auditor:         auditor@estacion.com         / auditor123')

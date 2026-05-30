@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Usuario, Rol, Permiso, LimiteConsumo
+from .models import Usuario, Rol, Permiso, LimiteConsumo, Empresa
 
 class PermisoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -70,7 +70,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'id', 'nombre', 'email', 'is_active', 'is_staff',
             'created_at', 'updated_at', 'created_by', 'updated_by',
             'roles', 'roles_detalle', 'permisos',
-            'password'
+            'password','sucursal',
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by', 'updated_by']
 
@@ -255,3 +255,34 @@ class PrediccionConsumoRequestSerializer(serializers.Serializer):
         if not Usuario.objects.filter(id=value).exists():
             raise serializers.ValidationError('Cliente no encontrado.')
         return value
+
+class EmpresaSerializer(serializers.ModelSerializer):
+    total_usuarios = serializers.SerializerMethodField()
+    total_sucursales = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Empresa
+        fields = '__all__'
+
+    def get_total_usuarios(self, obj):
+        return obj.usuarios.filter(is_active=True).count()
+
+    def get_total_sucursales(self, obj):
+        return obj.sucursales.count()
+
+
+class CrearEmpresaSerializer(serializers.Serializer):
+    nombre = serializers.CharField(max_length=150)
+    nit = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    direccion = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    plan = serializers.ChoiceField(choices=['BASICO', 'PROFESIONAL', 'ENTERPRISE'], default='BASICO')
+    admin_nombre = serializers.CharField(max_length=150)
+    admin_email = serializers.EmailField()
+    admin_password = serializers.CharField(min_length=8)
+
+    def validate_admin_email(self, value):
+        if Usuario.objects.filter(email=value).exists():
+            raise serializers.ValidationError('Ya existe un usuario con ese email')
+        return value.lower().strip()

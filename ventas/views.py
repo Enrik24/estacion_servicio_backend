@@ -15,14 +15,17 @@ from django.db import transaction
 import uuid
 import re
 
-from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo
+from usuarios import models
+from django.db.models import Max
+from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo,EmpresaCliente
 
 from .serializers import (
     ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
-    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer
+    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer,
+    TicketVentaSerializer
 )
 from utils.permissions import HasPermiso
-from seguridad.models import Bitacora
+from seguridad.models import Bitacora ,registrar_bitacora
 from usuarios.models import Usuario, Rol
 
 class IslaViewSet(viewsets.ModelViewSet):
@@ -31,7 +34,16 @@ class IslaViewSet(viewsets.ModelViewSet):
     serializer_class = IslaSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'surtidores.ver'
-
+    def get_queryset(self):
+            user = self.request.user
+            if user.is_superuser:
+                return Isla.objects.prefetch_related('lados').all()
+            if user.empresa:
+                qs = Isla.objects.prefetch_related('lados').filter(sucursal__empresa=user.empresa)
+                if user.sucursal:
+                    qs = qs.filter(sucursal=user.sucursal)
+                return qs
+            return Isla.objects.none()
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -44,20 +56,49 @@ class IslaViewSet(viewsets.ModelViewSet):
 
 
 class LadoViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestionar lados de islas con referencia a su isla."""
     queryset = Lado.objects.select_related('isla').all()
     serializer_class = LadoSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'surtidores.ver'
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            qs = Lado.objects.select_related('isla').all()
+        elif user.empresa:
+            qs = Lado.objects.select_related('isla').filter(isla__sucursal__empresa=user.empresa)
+            if user.sucursal:
+                qs = qs.filter(isla__sucursal=user.sucursal)
+        else:
+            return Lado.objects.none()
 
+        # Filtrar por isla si viene en query params
+        isla_id = self.request.query_params.get('isla')
+        if isla_id:
+            qs = qs.filter(isla_id=isla_id)
+
+        return qs
 class TipoCombustibleViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar tipos de combustible activos."""
     queryset = TipoCombustible.objects.filter(activo=True)
     serializer_class = TipoCombustibleSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'surtidores.ver'
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return TipoCombustible.objects.filter(activo=True)
+        if user.empresa:
+            return TipoCombustible.objects.filter(activo=True, empresa=user.empresa)
+        return TipoCombustible.objects.none()
+    def perform_update(self, serializer):
+        tipo = serializer.save()
+        registrar_bitacora(
+            self.request,
+            accion='EDITAR',
+            modulo='Sucursales',
+            descripcion=f'Actualizó precio de {tipo.get_tipo_display()} a Bs. {tipo.precio_litro}/Lt',
+        )
 
 class TurnoViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar turnos de operadores con apertura y cierre."""
@@ -65,7 +106,17 @@ class TurnoViewSet(viewsets.ModelViewSet):
     serializer_class = TurnoSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'turnos.ver'
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Turno.objects.all()
+        if user.empresa:
+            qs = Turno.objects.filter(operador__empresa=user.empresa)
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                qs = qs.filter(isla__sucursal=user.sucursal)
+            return qs
+        return Turno.objects.none()
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -84,19 +135,12 @@ class TurnoViewSet(viewsets.ModelViewSet):
             raise ValidationError('Ya tienes un turno abierto')
         serializer.save(operador=self.request.user)
 
-        Bitacora.objects.create(
-            usuario=self.request.user,
-            usuario_email=self.request.user.email,
-            usuario_nombre=self.request.user.nombre,
-            usuario_rol=self.request.user.nombre_rol,
+        registrar_bitacora(
+            self.request,
             accion='CREAR',
-            estado='EXITO',
-            modulo_afectado='Venta y POS',
             descripcion='Apertura de turno',
-            ip_address=getattr(self.request, 'ip_address', None),
-            user_agent=getattr(self.request, 'user_agent', '')[:500]
+            modulo='Venta y POS'
         )
-
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def cerrar(self, request, pk=None):
         """Cierra un turno registrando el monto final y observaciones."""
@@ -113,17 +157,12 @@ class TurnoViewSet(viewsets.ModelViewSet):
         turno.observaciones = request.data.get('observaciones', '')
         turno.save()
 
-        Bitacora.objects.create(
-            usuario=request.user,
-            usuario_email=request.user.email,
-            usuario_nombre=request.user.nombre,
-            usuario_rol=request.user.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='EDITAR',
             estado='EXITO',
-            modulo_afectado='Venta y POS',
+            modulo='Venta y POS',
             descripcion='Cierre de turno',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
         )
 
         return Response(TurnoSerializer(turno).data)
@@ -139,11 +178,19 @@ class TurnoViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def resumen(self, request):
-        """Obtiene resumen de turnos con detalles de ventas agrupadas por tipo de combustible."""
         fecha = request.query_params.get('fecha', None)
         horario = request.query_params.get('horario', None)
+        user = request.user
 
-        turnos = Turno.objects.select_related('operador', 'isla').all()
+        if user.empresa:
+            turnos = Turno.objects.select_related('operador', 'isla').filter(
+                operador__empresa=user.empresa
+            )
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                turnos = turnos.filter(isla__sucursal=user.sucursal)
+        else:
+            turnos = Turno.objects.none()
 
         if fecha:
             turnos = turnos.filter(fecha_apertura__date=fecha)
@@ -159,7 +206,6 @@ class TurnoViewSet(viewsets.ModelViewSet):
             total_ventas = sum(v.total for v in ventas)
             total_litros = sum(v.litros for v in ventas)
 
-            # Litros agrupados por tipo de combustible
             litros_por_tipo = {}
             for v in ventas:
                 tipo = v.tipo_combustible.get_tipo_display()
@@ -185,14 +231,22 @@ class TurnoViewSet(viewsets.ModelViewSet):
             })
 
         return Response(data)
-
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes activos con creación automática de credenciales."""
     queryset = Cliente.objects.filter(activo=True)
     serializer_class = ClienteSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'clientes.ver'
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Cliente.objects.filter(activo=True)
+        if user.empresa:
+            return Cliente.objects.filter(
+                activo=True,
+                empresa_clientes__empresa=user.empresa
+            ).distinct()
+        return Cliente.objects.none()
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -250,19 +304,11 @@ class ClienteViewSet(viewsets.ModelViewSet):
                     'email': email_generado,
                     'password': ci,
                 }
-
-                # Registrar en bitácora
-                Bitacora.objects.create(
-                    usuario=request.user,
-                    usuario_email=request.user.email,
-                    usuario_nombre=request.user.nombre,
-                    usuario_rol=request.user.nombre_rol,
+                registrar_bitacora(
+                    request,
                     accion='CREAR',
-                    estado='EXITO',
-                    modulo_afectado='Usuarios',
+                    modulo='Usuarios',
                     descripcion=f'Credenciales creadas automáticamente para cliente {cliente.nombre}',
-                    ip_address=getattr(request, 'ip_address', None),
-                    user_agent=getattr(request, 'user_agent', '')[:500]
                 )
 
             except Exception as e:
@@ -273,7 +319,12 @@ class ClienteViewSet(viewsets.ModelViewSet):
         if credenciales:
             response_data = dict(serializer.data)
             response_data['credenciales'] = credenciales
-
+       
+        if request.user.empresa:
+            EmpresaCliente.objects.get_or_create(
+                empresa=request.user.empresa,
+                cliente=cliente
+            )
         return Response(response_data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasPermiso])
@@ -294,7 +345,17 @@ class VentaViewSet(viewsets.ModelViewSet):
     serializer_class = VentaSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'ventas.ver'
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Venta.objects.all()
+        if user.empresa:
+            qs = Venta.objects.filter(turno__operador__empresa=user.empresa)
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                qs = qs.filter(turno__isla__sucursal=user.sucursal)
+            return qs
+        return Venta.objects.none()
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -320,9 +381,17 @@ class VentaViewSet(viewsets.ModelViewSet):
         except Lado.DoesNotExist:
             return Response({'error': 'Lado no válido para tu isla asignada'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Verificar estado del surtidor
+        from monitoreo.models import EstadoSurtidor
+        estado_surtidor = EstadoSurtidor.objects.filter(lado=lado).first()
+        if estado_surtidor and estado_surtidor.estado != 'ACTIVO':
+            return Response(
+                {'error': f'El Lado {lado.lado} de la Isla {lado.isla.numero} está {estado_surtidor.estado}. No se puede registrar una venta.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         tipo_combustible = TipoCombustible.objects.get(id=data['tipo_combustible_id'])
         precio_unitario = tipo_combustible.precio_litro
-
         es_lleno = data.get('es_lleno', False)
 
         if es_lleno:
@@ -364,21 +433,31 @@ class VentaViewSet(viewsets.ModelViewSet):
             numero_comprobante=numero_comprobante,
             created_by=request.user
         )
-
+        # Descontar litros del tanque correspondiente
+        try:
+            from inventario.models import Tanque
+            tanque = Tanque.objects.filter(
+                sucursal=turno.isla.sucursal,
+                tipo_combustible=tipo_combustible,
+                activo=True
+            ).first()
+            if tanque and litros:
+                tanque.nivel_actual = max(0, float(tanque.nivel_actual) - float(litros))
+                tanque.save()
+                # Notificar si nivel crítico
+            if tanque.en_alerta:
+                from utils.onesignal import notificar_nivel_critico
+                notificar_nivel_critico(tanque)
+        except Exception:
+            pass
         desc = f'Lleno - {tipo_combustible.get_tipo_display()}' if es_lleno else \
             f'Registró venta de {litros} Lt de {tipo_combustible.get_tipo_display()} - Bs. {total}'
 
-        Bitacora.objects.create(
-            usuario=request.user,
-            usuario_email=request.user.email,
-            usuario_nombre=request.user.nombre,
-            usuario_rol=request.user.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='CREAR',
-            estado='EXITO',
-            modulo_afectado='Venta y POS',
-            descripcion='Registro de venta',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
+            descripcion=desc,
+            modulo='Venta y POS'
         )
 
         return Response(VentaSerializer(venta).data, status=status.HTTP_201_CREATED)
@@ -395,17 +474,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             venta.cliente.saldo_credito += venta.total
             venta.cliente.save()
 
-        Bitacora.objects.create(
-            usuario=request.user,
-            usuario_email=request.user.email,
-            usuario_nombre=request.user.nombre,
-            usuario_rol=request.user.nombre_rol,
+        registrar_bitacora(
+            request,
             accion='ELIMINAR',
-            estado='EXITO',
-            modulo_afectado='Venta y POS',
             descripcion='Anulación de venta',
-            ip_address=getattr(request, 'ip_address', None),
-            user_agent=getattr(request, 'user_agent', '')[:500]
+            modulo='Venta y POS'
         )
 
         return Response({'mensaje': 'Venta anulada correctamente'})
@@ -427,19 +500,45 @@ class VehiculoViewSet(GenericViewSet):
 
     @action(detail=False, methods=['get'])
     def buscar_placa(self, request):
-        """Busca un vehículo por su número de placa."""
         placa = request.query_params.get('placa', '').upper().strip()
         if not placa:
             return Response({'error': 'Debes ingresar una placa'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             vehiculo = Vehiculo.objects.select_related('cliente').get(placa=placa, activo=True)
-            return Response({
-                'encontrado': True,
-                'vehiculo': VehiculoSerializer(vehiculo).data
-            })
+            
+            # Verificar si el cliente está registrado en esta empresa
+            if request.user.empresa:
+                registrado_en_empresa = EmpresaCliente.objects.filter(
+                    empresa=request.user.empresa,
+                    cliente=vehiculo.cliente
+                ).exists()
+                
+                return Response({
+                    'encontrado': True,
+                    'registrado_en_empresa': registrado_en_empresa,
+                    'vehiculo': VehiculoSerializer(vehiculo).data
+                })
+            
+            return Response({'encontrado': True, 'registrado_en_empresa': False, 'vehiculo': VehiculoSerializer(vehiculo).data})
+        
         except Vehiculo.DoesNotExist:
             return Response({'encontrado': False})
-
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def registrar_en_empresa(self, request):
+        cliente_id = request.data.get('cliente_id')
+        if not cliente_id:
+            return Response({'error': 'cliente_id requerido'}, status=400)
+        try:
+            cliente = Cliente.objects.get(id=cliente_id, activo=True)
+            if request.user.empresa:
+                EmpresaCliente.objects.get_or_create(
+                    empresa=request.user.empresa,
+                    cliente=cliente
+                )
+            return Response({'mensaje': 'Cliente registrado en la empresa correctamente'})
+        except Cliente.DoesNotExist:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def registrar_cliente_vehiculo(self, request):
         """Registra un nuevo cliente con su vehículo e crea credenciales automáticas si se proporciona CI."""
@@ -471,7 +570,7 @@ class VehiculoViewSet(GenericViewSet):
             credenciales = None
             if ci:
                 try:
-                    # Generar email desde primer nombre, normalizando caracteres especiales
+                    # Buscar si ya existe un usuario asociado a este cliente por nombre similar
                     nombre_limpio = cliente.nombre.strip().lower()
                     nombre_limpio = re.sub(r'[áäà]', 'a', nombre_limpio)
                     nombre_limpio = re.sub(r'[éëè]', 'e', nombre_limpio)
@@ -483,46 +582,49 @@ class VehiculoViewSet(GenericViewSet):
                     partes = nombre_limpio.split()
                     primer_nombre = partes[0] if partes else 'cliente'
 
-                    email_generado = f"{primer_nombre}@estacion.com"
+                    email_base = f"{primer_nombre}@estacion.com"
+                    usuario_existente = Usuario.objects.filter(
+                        nombre__iexact=cliente.nombre
+                    ).first()
 
-                    # Evitar emails duplicados añadiendo número
-                    base_email = primer_nombre
-                    contador = 1
-                    while Usuario.objects.filter(email=email_generado).exists():
-                        email_generado = f"{base_email}{contador}@estacion.com"
-                        contador += 1
+                    if usuario_existente:
+                        # Ya tiene credenciales, no crear nuevas
+                        credenciales = {
+                            'email': usuario_existente.email,
+                            'ya_existia': True,
+                            'mensaje': 'El cliente ya tiene credenciales en el sistema'
+                        }
+                    else:
+                        # Crear nuevas credenciales
+                        email_generado = email_base
+                        base_email = primer_nombre
+                        contador = 1
+                        while Usuario.objects.filter(email=email_generado).exists():
+                            email_generado = f"{base_email}{contador}@estacion.com"
+                            contador += 1
 
-                    # Obtener rol de cliente
-                    rol_cliente = Rol.objects.filter(nombre__iexact='cliente').first()
+                        rol_cliente = Rol.objects.filter(nombre__iexact='cliente').first()
 
-                    # Crear usuario con credenciales automáticas
-                    usuario = Usuario.objects.create_user(
-                        email=email_generado,
-                        nombre=cliente.nombre,
-                        password=ci,
-                        created_by=request.user
-                    )
+                        usuario = Usuario.objects.create_user(
+                            email=email_generado,
+                            nombre=cliente.nombre,
+                            password=ci,
+                            created_by=request.user
+                        )
 
-                    if rol_cliente:
-                        usuario.roles.add(rol_cliente)
+                        if rol_cliente:
+                            usuario.roles.add(rol_cliente)
 
-                    credenciales = {
-                        'email': email_generado,
-                        'password': ci,
-                    }
-
-                    # Registrar acción en bitácora
-                    Bitacora.objects.create(
-                        usuario=request.user,
-                        usuario_email=request.user.email,
-                        usuario_nombre=request.user.nombre,
-                        usuario_rol=request.user.nombre_rol,
+                        credenciales = {
+                            'email': email_generado,
+                            'password': ci,
+                            'ya_existia': False,
+                        }
+                    registrar_bitacora(
+                        request,
                         accion='CREAR',
-                        estado='EXITO',
-                        modulo_afectado='Usuarios',
+                        modulo='Usuarios',
                         descripcion=f'Credenciales creadas para cliente {cliente.nombre} - {email_generado}',
-                        ip_address=getattr(request, 'ip_address', None),
-                        user_agent=getattr(request, 'user_agent', '')[:500]
                     )
 
                 except Exception as e:
@@ -534,15 +636,37 @@ class VehiculoViewSet(GenericViewSet):
         }
         if credenciales:
             response_data['credenciales'] = credenciales
-
+        if request.user.empresa:
+            EmpresaCliente.objects.get_or_create(
+                empresa=request.user.empresa,
+                cliente=cliente
+            )
         return Response(response_data, status=status.HTTP_201_CREATED)
+   
+   
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, HasPermiso])
+    def ticket(self, request, pk=None):
+        venta = self.get_object()
+        serializer = TicketVentaSerializer(venta)
+        return Response(serializer.data)
+
 class SucursalViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sucursales con creación automática de islas y lados."""
     queryset = Sucursal.objects.all()
     serializer_class = SucursalSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'sucursales.ver'
-
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Sucursal.objects.all()
+        if user.empresa:
+            qs = Sucursal.objects.filter(empresa=user.empresa)
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                qs = qs.filter(id=user.sucursal.id)
+            return qs
+        return Sucursal.objects.none()
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -554,19 +678,32 @@ class SucursalViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        """Crea la sucursal y genera automáticamente sus islas y lados."""
-        sucursal = serializer.save()
-        # Crear islas y lados automáticamente según la cantidad de islas configurada
+        tipos = self.request.data.get('tipos_combustible', [])
+        sucursal = serializer.save(empresa=self.request.user.empresa)
+        if tipos:
+            sucursal.tipos_combustible.set(tipos)
+        ultimo_numero = Isla.objects.aggregate(max_num=Max('numero'))['max_num'] or 0
         for i in range(1, sucursal.cantidad_islas + 1):
-            isla = Isla.objects.create(
-                numero=i,
-                sucursal=sucursal,
-                estado='ACTIVO'
-            )
-            # Cada isla tiene dos lados: A y B
+            isla = Isla.objects.create(numero=i, sucursal=sucursal, estado='ACTIVO')
             Lado.objects.create(isla=isla, lado='A', activo=True)
-            Lado.objects.create(isla=isla, lado='B', activo=True)        
+            Lado.objects.create(isla=isla, lado='B', activo=True)
+        registrar_bitacora(self.request, accion='CREAR', descripcion=f'Creó la sucursal: {sucursal.nombre}', modulo='Sucursales')
 
+    def perform_update(self, serializer):
+        tipos = self.request.data.get('tipos_combustible', [])
+        sucursal = serializer.save()
+        if tipos:
+            sucursal.tipos_combustible.set(tipos)
+        registrar_bitacora(self.request, accion='EDITAR', descripcion=f'Editó la sucursal: {sucursal.nombre}', modulo='Sucursales')
+
+    def perform_destroy(self, instance):
+        registrar_bitacora(
+            self.request,
+            accion='ELIMINAR',
+            modulo='Sucursales',
+            descripcion=f'Eliminó la sucursal: {instance.nombre}',
+        )
+        instance.delete()
 
 class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     """ViewSet para gestionar la consolidación de caja y reportes de cierre de turnos.
@@ -580,28 +717,27 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     permiso_requerido = 'turnos.ver'
     
     def list(self, request):
-        """Lista todos los turnos cerrados y NO consolidados con indicadores de caja."""
-        # Obtener solo turnos cerrados Y no consolidados
-        turnos_qs = Turno.objects.filter(
-            estado='CERRADO', 
-            consolidado=False
-        ).select_related(
-            'operador', 
-            'isla', 
-            'isla__sucursal',
-            'sucursal'
-        ).prefetch_related('ventas')
-        
-        # Serializar con consolidación de datos
+        user = request.user
+        if user.empresa:
+            turnos_qs = Turno.objects.filter(
+                estado='CERRADO',
+                consolidado=False,
+                operador__empresa=user.empresa
+            ).select_related('operador', 'isla', 'isla__sucursal', 'sucursal').prefetch_related('ventas')
+            # Filtrar por sucursal si es gerente
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                turnos_qs = turnos_qs.filter(isla__sucursal=user.sucursal)
+        else:
+            turnos_qs = Turno.objects.none()
+
         serializer = ConsolidacionCajaSerializer(turnos_qs, many=True)
         data_tabla = serializer.data
 
-        # Calcular indicadores agregados
         total_facturas_emitidas = sum(item['total_facturas'] for item in data_tabla)
         monto_faltantes_total = sum(abs(item['diferencia']) for item in data_tabla if item['diferencia'] < 0)
         turnos_pendientes_count = turnos_qs.count()
 
-        # Retornar respuesta con indicadores y tabla
         return Response({
             'indicadores': {
                 'turnos_pendientes': turnos_pendientes_count,
@@ -613,34 +749,34 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermiso])
     def consolidar(self, request, pk=None):
-        """Consolida un turno específico marcándolo como consolidado y registrando en bitácora."""
         turno = Turno.objects.get(pk=pk)
-        
-        # Validar que el turno esté cerrado
+        user = request.user
+
+        # Verificar que el turno pertenece a la empresa del usuario
+        if not user.is_superuser:
+            if turno.operador.empresa != user.empresa:
+                return Response({'error': 'Sin permiso'}, status=403)
+            
+            # Si es gerente solo puede consolidar turnos de su sucursal
+            rol = user.roles.first()
+            if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
+                if turno.isla.sucursal != user.sucursal:
+                    return Response({'error': 'No puedes consolidar turnos de otra sucursal'}, status=403)
+
         if turno.estado != 'CERRADO':
             return Response(
                 {'error': 'Solo se pueden consolidar turnos cerrados'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Usar transacción atómica para asegurar integridad
+
         with transaction.atomic():
-            # Marcar turno como consolidado
             turno.consolidado = True
             turno.save()
-
-            # Registrar en bitácora
-            Bitacora.objects.create(
-                usuario=request.user,
-                usuario_email=request.user.email,
-                usuario_nombre=request.user.nombre,
-                usuario_rol=request.user.nombre_rol,
+            registrar_bitacora(
+                request,
                 accion='CREAR',
-                estado='EXITO',
-                modulo_afectado='Venta y POS',
+                modulo='Venta y POS',
                 descripcion=f'Consolidación de Caja - Turno #{turno.id}',
-                ip_address=getattr(request, 'ip_address', None),
-                user_agent=getattr(request, 'user_agent', '')[:500]
             )
-        
+
         return Response({'mensaje': 'Turno consolidado correctamente'})

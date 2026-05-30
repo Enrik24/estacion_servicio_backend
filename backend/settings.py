@@ -55,6 +55,10 @@ INSTALLED_APPS = [
     'utils',
     'ventas',
     'backup',
+    'reportes',
+    'monitoreo',
+    'inventario',
+    'django_crontab',
 ]
 
 MIDDLEWARE = [
@@ -196,3 +200,25 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+
+#GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
+
+GROQ_API_KEY = config('GROQ_API_KEY', default=None)
+
+# Email (SMTP Gmail)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_PASS')
+# OneSignal
+ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
+ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
+DEFAULT_FROM_EMAIL = config('EMAIL_USER')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+CRONJOBS = [
+    ('0 2 * * *', 'backup.crons.backup_automatico', '>> /tmp/backup_cron.log 2>&1'),
+]
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY')

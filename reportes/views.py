@@ -488,6 +488,6 @@ JSON:"""
             status=422,
         )
 
-    registrar_bitacora(request, f'Interpretó comando de voz: "{texto[:100]}"')
+    registrar_bitacora(request, request.user, f'Interpretó comando de voz: "{texto[:100]}"')
 
     return Response(resultado)

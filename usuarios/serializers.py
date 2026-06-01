@@ -246,12 +246,24 @@ class ValidarConsumoSerializer(serializers.Serializer):
 
 
 class PrediccionConsumoRequestSerializer(serializers.Serializer):
-    cliente_id = serializers.IntegerField(required=True)
+    cliente_id = serializers.IntegerField(required=False, default=None)
+    tipo_combustible_id = serializers.IntegerField(required=False, default=None)
     tipo_periodo = serializers.ChoiceField(choices=LimiteConsumo.TIPOS, required=False, default='DIARIO')
     unidad = serializers.ChoiceField(choices=LimiteConsumo.UNIDADES, required=False, default='MONTO')
     dias = serializers.IntegerField(required=False, min_value=1, max_value=31, default=7)
 
     def validate_cliente_id(self, value):
-        if not Usuario.objects.filter(id=value).exists():
+        if value is None:
+            return value
+        from ventas.models import Cliente
+        if not Cliente.objects.filter(id=value).exists():
             raise serializers.ValidationError('Cliente no encontrado.')
+        return value
+
+    def validate_tipo_combustible_id(self, value):
+        if value is None:
+            return value
+        from ventas.models import TipoCombustible
+        if not TipoCombustible.objects.filter(id=value).exists():
+            raise serializers.ValidationError('Tipo de combustible no encontrado.')
         return value

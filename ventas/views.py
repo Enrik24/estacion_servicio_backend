@@ -290,12 +290,21 @@ class ClienteViewSet(viewsets.ModelViewSet):
     permiso_requerido = 'clientes.ver'
 
     def get_queryset(self):
-        return Cliente.objects.filter(activo=True).select_related('usuario').order_by(
+        qs = Cliente.objects.filter(activo=True).select_related('usuario').order_by(
             '-usuario_id',
             '-email',
             'nombre',
             'id',
         )
+        # Multi-tenant: solo clientes con ventas en la sucursal del usuario
+        sucursal_id = getattr(self.request.user, 'sucursal_id', None)
+        if sucursal_id:
+            ids_clientes = Venta.objects.filter(
+                turno__sucursal_id=sucursal_id,
+                cliente__isnull=False,
+            ).values_list('cliente_id', flat=True).distinct()
+            qs = qs.filter(id__in=ids_clientes)
+        return qs
 
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""

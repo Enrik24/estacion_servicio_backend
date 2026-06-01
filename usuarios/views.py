@@ -228,6 +228,10 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Usuario.objects.filter(roles__nombre__iexact='Cliente').distinct().prefetch_related('roles')
+        # Multi-tenant: solo usuarios-cliente vinculados a la sucursal
+        sucursal_id = getattr(self.request.user, 'sucursal_id', None)
+        if sucursal_id:
+            queryset = queryset.filter(sucursal_id=sucursal_id)
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(models.Q(nombre__icontains=search) | models.Q(email__icontains=search))
@@ -285,6 +289,10 @@ class LimiteConsumoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        # Multi-tenant: solo límites de clientes de la sucursal
+        sucursal_id = getattr(self.request.user, 'sucursal_id', None)
+        if sucursal_id:
+            queryset = queryset.filter(cliente__sucursal_id=sucursal_id)
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(

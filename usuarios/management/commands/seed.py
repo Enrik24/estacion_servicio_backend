@@ -369,14 +369,21 @@ class Command(BaseCommand):
         ]
 
         for isla_data in islas_data:
-            isla, created = Isla.objects.get_or_create(
-                numero=isla_data['numero'],
-                defaults={
-                    'descripcion': isla_data['descripcion'],
-                    'estado': 'ACTIVO',
-                    'sucursal': sucursal_principal,
-                }
-            )
+            if sucursal_principal:
+                isla_qs = Isla.objects.filter(numero=isla_data['numero'], sucursal=sucursal_principal).order_by('id')
+            else:
+                isla_qs = Isla.objects.filter(numero=isla_data['numero']).order_by('id')
+
+            isla = isla_qs.first()
+            created = isla is None
+
+            if created:
+                isla = Isla.objects.create(
+                    numero=isla_data['numero'],
+                    descripcion=isla_data['descripcion'],
+                    estado='ACTIVO',
+                    sucursal=sucursal_principal,
+                )
             # Si la isla ya existía sin sucursal, asignarla
             if not created and isla.sucursal is None and sucursal_principal:
                 isla.sucursal = sucursal_principal
@@ -407,10 +414,16 @@ class Command(BaseCommand):
         ]
 
         for tipo_data in tipos_data:
-            tipo, created = TipoCombustible.objects.get_or_create(
-                tipo=tipo_data['tipo'],
-                defaults={'precio_litro': tipo_data['precio_litro'], 'activo': True}
-            )
+            tipo_qs = TipoCombustible.objects.filter(tipo=tipo_data['tipo']).order_by('id')
+            tipo = tipo_qs.first()
+            created = tipo is None
+
+            if created:
+                tipo = TipoCombustible.objects.create(
+                    tipo=tipo_data['tipo'],
+                    precio_litro=tipo_data['precio_litro'],
+                    activo=True,
+                )
             if created:
                 self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {tipo.get_tipo_display()}'))
             else:

@@ -16,6 +16,20 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
+            name='EmailVerificationToken',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True, serialize=False)),
+                ('token', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('expires_at', models.DateTimeField(blank=True, null=True)),
+                ('used', models.BooleanField(default=False)),
+            ],
+            options={
+                'db_table': 'email_verification_tokens',
+                'ordering': ['-created_at'],
+            },
+        ),
+        migrations.CreateModel(
             name='Empresa',
             fields=[
                 ('id', models.BigAutoField(primary_key=True, serialize=False)),
@@ -111,6 +125,9 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(primary_key=True, serialize=False)),
                 ('nombre', models.CharField(max_length=150)),
                 ('email', models.EmailField(max_length=254, unique=True)),
+                ('email_verificado', models.BooleanField(default=True)),
+                ('email_verificado_at', models.DateTimeField(blank=True, null=True)),
+                ('acepta_politica_privacidad_at', models.DateTimeField(blank=True, null=True)),
                 ('is_active', models.BooleanField(default=True)),
                 ('is_staff', models.BooleanField(default=False)),
                 ('is_superuser', models.BooleanField(default=False)),

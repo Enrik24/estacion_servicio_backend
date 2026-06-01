@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     
     # Local apps
@@ -54,11 +55,12 @@ INSTALLED_APPS = [
     'seguridad',
     'utils',
     'ventas',
-    'backup',
     'reportes',
+    'backup',
     'monitoreo',
     'inventario',
     'django_crontab',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -98,7 +100,9 @@ ASGI_APPLICATION = 'backend.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-USE_SQLITE = config('USE_SQLITE', default=False, cast=bool)
+
+USE_SQLITE = config('USE_SQLITE', default=True, cast=bool)
+
 
 if USE_SQLITE:
     DATABASES = {
@@ -129,9 +133,9 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {'min_length': 8}
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+   # {
+   #     'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+   # },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
@@ -154,6 +158,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Media files (uploaded PDFs, receipts, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -207,7 +215,6 @@ if DEBUG:
 #GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
 
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
-
 TOKEN_PLATERECOGNIZER = config('TOKEN_PLATERECOGNIZER', default=None)
 
 # Email (SMTP Gmail)
@@ -227,3 +234,11 @@ CRONJOBS = [
 ]
 SUPABASE_URL = config('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY')
+
+# Stripe
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='sk_test_mock')
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='pk_test_mock')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# Prepago
+PREPAGO_MONTO_MAXIMO = config('PREPAGO_MONTO_MAXIMO', default=1000, cast=int)

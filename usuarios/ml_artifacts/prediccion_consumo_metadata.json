@@ -1,0 +1,38 @@
+{
+  "model_version": "rf-20260509062230",
+  "modelo_nombre": "baseline_rolling_mean",
+  "trained_at": "2026-05-09T06:22:30.192604+00:00",
+  "dataset_size": 132,
+  "splits": {
+    "train": 79,
+    "valid": 26,
+    "test": 27
+  },
+  "metricas_modelo": {
+    "mae": 5.909890109890114,
+    "rmse": 8.1516465384169,
+    "mape": 6.752714159546461
+  },
+  "metricas_test": {
+    "mae": 111.95944624819633,
+    "rmse": 281.0063540575034,
+    "mape": 29.151466496650762
+  },
+  "baseline_metricas_valid": {
+    "mae": 5.909890109890114,
+    "rmse": 8.1516465384169,
+    "mape": 6.752714159546461
+  },
+  "retrain_recomendado_cada_dias": 7,
+  "rollback_modelo_anterior": "D:\\si2\\ofi_backend\\usuarios\\ml_artifacts\\prediccion_consumo_model.pkl",
+  "feature_order": [
+    "cliente_id",
+    "dia",
+    "mes",
+    "dia_semana",
+    "tipo_periodo",
+    "unidad",
+    "rolling_mean_7"
+  ],
+  "trained_for_date": "2026-05-09"
+}

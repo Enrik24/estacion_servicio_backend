@@ -120,6 +120,26 @@ class Migration(migrations.Migration):
             field=models.ManyToManyField(blank=True, related_name='sucursales', to='ventas.tipocombustible'),
         ),
         migrations.CreateModel(
+            name='CompraCombustible',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True, serialize=False)),
+                ('cantidad', models.DecimalField(decimal_places=3, max_digits=10)),
+                ('unidad', models.CharField(max_length=10)),
+                ('precio_unitario', models.DecimalField(decimal_places=2, max_digits=10)),
+                ('total', models.DecimalField(decimal_places=2, max_digits=12)),
+                ('fecha_hora', models.DateTimeField(auto_now_add=True)),
+                ('observacion', models.TextField(blank=True, null=True)),
+                ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='compras_registradas', to=settings.AUTH_USER_MODEL)),
+                ('tipo_combustible', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='compras', to='ventas.tipocombustible')),
+            ],
+            options={
+                'verbose_name': 'Compra de Combustible',
+                'verbose_name_plural': 'Compras de Combustible',
+                'db_table': 'compras_combustible',
+                'ordering': ['-fecha_hora'],
+            },
+        ),
+        migrations.CreateModel(
             name='Turno',
             fields=[
                 ('id', models.BigAutoField(primary_key=True, serialize=False)),
@@ -170,6 +190,7 @@ class Migration(migrations.Migration):
                 ('metodo_pago', models.CharField(choices=[('EFECTIVO', 'Efectivo'), ('TARJETA', 'Tarjeta'), ('QR', 'Pago QR'), ('CREDITO_FLEET', 'Crédito Fleet')], max_length=20)),
                 ('estado', models.CharField(choices=[('COMPLETADA', 'Completada'), ('ANULADA', 'Anulada')], default='COMPLETADA', max_length=20)),
                 ('numero_comprobante', models.CharField(max_length=50, unique=True)),
+                ('client_request_id', models.UUIDField(blank=True, db_index=True, default=None, null=True, unique=True)),
                 ('fecha_hora', models.DateTimeField(auto_now_add=True)),
                 ('cliente', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='ventas', to='ventas.cliente')),
                 ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='ventas_registradas', to=settings.AUTH_USER_MODEL)),

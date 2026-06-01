@@ -179,6 +179,13 @@ class Cliente(models.Model):
         blank=True,
         related_name='clientes'
     )
+    usuario = models.OneToOneField(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cliente_pos'
+)
     class Meta:
         db_table = 'clientes'
         verbose_name = 'Cliente'

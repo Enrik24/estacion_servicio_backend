@@ -311,7 +311,11 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
                 if rol_cliente:
                     usuario.roles.add(rol_cliente)
-
+                cliente.usuario = usuario
+                if not self.request.user.is_superuser and self.request.user.empresa:
+                    usuario.empresa = self.request.user.empresa
+                    usuario.save(update_fields=['empresa'])
+                cliente.save(update_fields=['usuario'])
                 credenciales = {
                     'email': email_generado,
                     'password': ci,
@@ -434,7 +438,70 @@ class VentaViewSet(viewsets.ModelViewSet):
                     cliente.save()
             except Cliente.DoesNotExist:
                 return Response({'error': 'Cliente no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
+        # Validar límites de consumo del cliente
+        if cliente and total is not None:
+            from django.utils import timezone as tz
+            from usuarios.models import LimiteConsumo, Usuario
+            from django.db.models import Sum
+            hoy = tz.now().date()
 
+            # Buscar usuario por email del cliente
+           # Buscar usuario vinculado al cliente
+            usuario_cliente = getattr(cliente, 'usuario', None)
+            if not usuario_cliente and cliente.email:
+                usuario_cliente = Usuario.objects.filter(email=cliente.email).first()
+            if usuario_cliente:
+                # Consumo diario
+                consumo_hoy = Venta.objects.filter(
+                    cliente=cliente,
+                    estado='COMPLETADA',
+                    fecha_hora__date=hoy
+                ).aggregate(t=Sum('total'))['t'] or 0
+
+                limite_diario = LimiteConsumo.objects.filter(
+                    cliente=usuario_cliente,
+                    tipo='DIARIO',
+                    is_active=True
+                ).first()
+                print(f"DEBUG límites - consumo_hoy: {consumo_hoy}, total: {total}, limite_diario: {limite_diario.valor if limite_diario else 'NO ENCONTRADO'}, usuario_cliente: {usuario_cliente}")
+                if limite_diario and (consumo_hoy + total) > limite_diario.valor:
+                    
+                    registrar_bitacora(
+                        request,
+                        accion='CREAR',
+                        descripcion=f'Compra rechazada por límite diario. Cliente: {cliente.nombre}. Consumido: Bs.{consumo_hoy}. Intento: Bs.{total}',
+                        modulo='Venta y POS'
+                    )
+                    return Response(
+                        {'error': f'Límite diario excedido. Consumido hoy: Bs. {consumo_hoy}. Límite: Bs. {limite_diario.valor}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Consumo mensual
+                consumo_mes = Venta.objects.filter(
+                    cliente=cliente,
+                    estado='COMPLETADA',
+                    fecha_hora__year=hoy.year,
+                    fecha_hora__month=hoy.month
+                ).aggregate(t=Sum('total'))['t'] or 0
+
+                limite_mensual = LimiteConsumo.objects.filter(
+                    cliente=usuario_cliente,
+                    tipo='MENSUAL',
+                    is_active=True
+                ).first()
+
+                if limite_mensual and (consumo_mes + total) > limite_mensual.valor:
+                    registrar_bitacora(
+                        request,
+                        accion='CREAR',
+                        descripcion=f'Compra rechazada por límite mensual. Cliente: {cliente.nombre}. Consumido: Bs.{consumo_mes}. Intento: Bs.{total}',
+                        modulo='Venta y POS'
+                    )
+                    return Response(
+                        {'error': f'Límite mensual excedido. Consumido este mes: Bs. {consumo_mes}. Límite: Bs. {limite_mensual.valor}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
         numero_comprobante = f"VTA-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
 
         venta = Venta.objects.create(

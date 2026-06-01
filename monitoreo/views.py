@@ -111,7 +111,15 @@ class MonitoreoViewSet(viewsets.ViewSet):
             else:
                 # 2. Para cualquier otro cambio normal (ej. marcar FALLA o INACTIVO)
                 estado_obj.estado = nuevo_estado
+                estado_obj.descripcion_falla = descripcion if nuevo_estado == 'FALLA' else None
+                estado_obj.reportado_por = request.user
+                if nuevo_estado == 'ACTIVO' and estado_anterior == 'FALLA':
+                    from django.utils import timezone
+                    estado_obj.fecha_resolucion = timezone.now()
                 estado_obj.save()
+                if nuevo_estado == 'FALLA':
+                    from utils.onesignal import notificar_falla_surtidor
+                    notificar_falla_surtidor(estado_obj.lado, descripcion, request.user)
 
             # 3. Registrar el historial limpio (SIN el campo parent_id que causaba el error)
             HistorialEstadoSurtidor.objects.create(

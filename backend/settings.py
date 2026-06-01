@@ -208,6 +208,8 @@ if DEBUG:
 
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
 
+TOKEN_PLATERECOGNIZER = config('TOKEN_PLATERECOGNIZER', default=None)
+
 # Email (SMTP Gmail)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

@@ -12,12 +12,23 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
+
+# Funciones para anotaciones y reemplazos en consultas
+from django.db.models import Value
+from django.db.models.functions import Replace
+
+# Importar modelos necesarios para la gestión de clientes y vehículos
+from rest_framework.permissions import AllowAny
+
 import uuid
 import re
+import requests # Para llamadas a la API de PlateRecognizer
 
 from usuarios import models
 from django.db.models import Max
 from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo,EmpresaCliente
+
+from backend.settings import TOKEN_PLATERECOGNIZER # Importar el token desde settings.py para usarlo en la función de procesamiento de imágenes
 
 from .serializers import (
     ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
@@ -231,6 +242,7 @@ class TurnoViewSet(viewsets.ModelViewSet):
             })
 
         return Response(data)
+    
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes activos con creación automática de credenciales."""
     queryset = Cliente.objects.filter(activo=True)
@@ -278,10 +290,10 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 email_generado = f"{primer_nombre}@estacion.com"
 
                 # Si ya existe ese email agregar número
-                base_email = email_generado
+                base_email_parte = email_generado.split('@')[0]
                 contador = 1
                 while Usuario.objects.filter(email=email_generado).exists():
-                    email_generado = f"{base_email.replace('@', f'{contador}@')}"
+                    email_generado = f"{base_email_parte}{contador}@estacion.com"
                     contador += 1
 
                 # Obtener rol Cliente
@@ -334,9 +346,13 @@ class ClienteViewSet(viewsets.ModelViewSet):
         if not sucursal_id:
             return Response({'error': 'Debes proporcionar sucursal_id'}, status=status.HTTP_400_BAD_REQUEST)
         
-        clientes = self.queryset.filter(sucursal_id=sucursal_id)
-        serializer = self.get_serializer(clientes, many=True)
-        return Response(serializer.data)
+        try:
+            sucursal = Sucursal.objects.get(id=sucursal_id)
+            clientes = self.queryset.filter(empresa_clientes__empresa=sucursal.empresa).distinct()
+            serializer = self.get_serializer(clientes, many=True)
+            return Response(serializer.data)
+        except Sucursal.DoesNotExist:
+            return Response({'error': 'Sucursal no encontrada'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class VentaViewSet(viewsets.ModelViewSet):
@@ -568,6 +584,7 @@ class VehiculoViewSet(GenericViewSet):
 
             # Crear credenciales automáticas si se proporciona CI
             credenciales = None
+            email_generado = None
             if ci:
                 try:
                     # Buscar si ya existe un usuario asociado a este cliente por nombre similar
@@ -589,18 +606,18 @@ class VehiculoViewSet(GenericViewSet):
 
                     if usuario_existente:
                         # Ya tiene credenciales, no crear nuevas
+                        email_generado = usuario_existente.email
                         credenciales = {
-                            'email': usuario_existente.email,
+                            'email': email_generado,
                             'ya_existia': True,
                             'mensaje': 'El cliente ya tiene credenciales en el sistema'
                         }
                     else:
                         # Crear nuevas credenciales
                         email_generado = email_base
-                        base_email = primer_nombre
                         contador = 1
                         while Usuario.objects.filter(email=email_generado).exists():
-                            email_generado = f"{base_email}{contador}@estacion.com"
+                            email_generado = f"{primer_nombre}{contador}@estacion.com"
                             contador += 1
 
                         rol_cliente = Rol.objects.filter(nombre__iexact='cliente').first()
@@ -620,12 +637,14 @@ class VehiculoViewSet(GenericViewSet):
                             'password': ci,
                             'ya_existia': False,
                         }
-                    registrar_bitacora(
-                        request,
-                        accion='CREAR',
-                        modulo='Usuarios',
-                        descripcion=f'Credenciales creadas para cliente {cliente.nombre} - {email_generado}',
-                    )
+                    
+                    if email_generado:
+                        registrar_bitacora(
+                            request,
+                            accion='CREAR',
+                            modulo='Usuarios',
+                            descripcion=f'Credenciales creadas para cliente {cliente.nombre} - {email_generado}',
+                        )
 
                 except Exception as e:
                     credenciales = {'error': str(e)}
@@ -642,14 +661,158 @@ class VehiculoViewSet(GenericViewSet):
                 cliente=cliente
             )
         return Response(response_data, status=status.HTTP_201_CREATED)
-   
-   
-    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, HasPermiso])
-    def ticket(self, request, pk=None):
-        venta = self.get_object()
-        serializer = TicketVentaSerializer(venta)
-        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def verificar_placa_lpr2(self, request):
+        """
+        Endpoint exclusivo para ser consumido por el script de la cámara (IoT).
+        Recibe un JSON con la placa y devuelve los datos asociados.
+        
+        Retorna información del vehículo y cliente asociado, validando que esté
+        registrado y activo en el sistema.
+        """
+        # Normalizar la placa que llega desde la cámara
+        placa_buscada = request.data.get('placa', '').upper().strip()
+        placa_limpia = re.sub(r'[\s\-.]', '', placa_buscada)
 
+        if not placa_limpia:
+            return Response({
+                'encontrado': False,
+                'error': 'No se proporcionó una placa'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Normalizar placas en BD removiendo guiones, espacios y puntos
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(
+                    Replace(
+                        Replace('placa', Value('-'), Value('')),
+                        Value(' '), Value('')
+                    ),
+                    Value('.'), Value('')
+                )
+            ).select_related('cliente').get(
+                placa_normalizada=placa_limpia,
+                activo=True
+            )
+            
+            cliente = vehiculo.cliente
+
+            # Validar que el cliente esté activo
+            if not cliente.activo:
+                return Response({
+                    "encontrado": False,
+                    "mensaje": "Cliente inactivo en el sistema."
+                }, status=status.HTTP_200_OK)
+
+            response_data = {
+                "encontrado": True,
+                "vehiculo": {
+                    "id": vehiculo.id,
+                    "placa": vehiculo.placa,
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo,
+                    "color": vehiculo.color
+                },
+                "cliente": {
+                    "id": cliente.id,
+                    "nombre": cliente.nombre,
+                    "nit": cliente.nit or 'S/N',
+                    "telefono": cliente.telefono,
+                    "saldo_credito": float(cliente.saldo_credito),
+                    "limite_credito": float(cliente.limite_credito)
+                }
+            }
+            
+            # Verificar si está registrado en la empresa actual (si aplica)
+            registrado_en_empresa = False
+            if request.user.is_authenticated and request.user.empresa:
+                registrado_en_empresa = EmpresaCliente.objects.filter(
+                    empresa=request.user.empresa,
+                    cliente=cliente
+                ).exists()
+                response_data["registrado_en_empresa"] = registrado_en_empresa
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "mensaje": "Vehículo foráneo. No registrado en el sistema."
+            }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def procesar_imagen_lpr(self, request):
+        """
+        Recibe una imagen desde la cámara en pista, la envía a PlateRecognizer,
+        y devuelve los datos del vehículo si está registrado.
+        """
+        # 1. Verificar que la petición incluya una imagen
+        if 'upload' not in request.FILES:
+            return Response({'error': 'No se envió ninguna imagen (archivo "upload")'}, status=status.HTTP_400_BAD_REQUEST)
+
+        imagen = request.FILES['upload']
+        
+        # 2. Validar que el archivo sea una imagen (opcional pero recomendado)
+        if not imagen.content_type.startswith('image/'):
+            return Response({'error': 'El archivo enviado no es una imagen válida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 3. Enviar la imagen a la API de PlateRecognizer
+            response = requests.post(
+                'https://api.platerecognizer.com/v1/plate-reader/',
+                data=dict(regions='bo'),  # 'bo' le da la pista a la IA de que busque placas de Bolivia
+                files=dict(upload=imagen.read()),
+                headers={'Authorization': f'Token {TOKEN_PLATERECOGNIZER}'},
+                timeout=5 # Tiempo máximo de espera
+            )
+            
+            res_json = response.json()
+            
+            # 4. Validar si la IA encontró alguna placa en la foto
+            if not res_json.get('results'):
+                return Response({
+                    'encontrado': False, 
+                    'mensaje': 'La IA no detectó ninguna placa clara en la imagen.'
+                }, status=status.HTTP_200_OK)
+                
+            # Extraer la placa con mayor nivel de confianza
+            placa_detectada = res_json['results'][0]['plate'].upper()
+            
+            # 5. Lógica de Base de Datos (La que ya habíamos solucionado)
+            placa_limpia = placa_detectada.replace('-', '').replace(' ', '')
+            
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(Replace('placa', Value('-'), Value('')), Value(' '), Value(''))
+            ).select_related('cliente').get(placa_normalizada=placa_limpia)
+            
+            cliente = vehiculo.cliente
+
+            # 6. Respuesta Exitosa
+            return Response({
+                "encontrado": True,
+                "placa_leida_ia": placa_detectada,
+                "vehiculo": {
+                    "placa": vehiculo.placa,
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo
+                },
+                "cliente": {
+                    "nombre": cliente.nombre,
+                    "nit": getattr(cliente, 'nit', 'S/N')
+                }
+            }, status=status.HTTP_200_OK)
+
+        except requests.exceptions.RequestException as e:
+            return Response({'error': f'Error conectando con PlateRecognizer: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "placa_leida_ia": placa_detectada,
+                "mensaje": f"Placa {placa_detectada} detectada, pero es un Vehículo foráneo."
+            }, status=status.HTTP_200_OK)
+        
 class SucursalViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sucursales con creación automática de islas y lados."""
     queryset = Sucursal.objects.all()

@@ -192,7 +192,6 @@ SIMPLE_JWT = {
 }
 DATABASE_URL = config('DATABASE_URL', default='')
 
-# CORS
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in config('CORS_ALLOWED_ORIGINS', default='').split(',')
@@ -200,6 +199,10 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+
+# Desarrollo local Flutter web
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 #GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
 

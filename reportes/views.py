@@ -44,14 +44,45 @@ def _filtrar_ventas(params):
 
     return qs
 
+def _filtrar_por_rol(user, qs_ventas=None, qs_turnos=None, qs_sucursales=None, qs_islas=None):
+    """Aplica filtro de empresa y sucursal según el rol del usuario."""
+    rol = user.roles.first() if not user.is_superuser else None
+    es_gerente = rol and 'gerente' in rol.nombre.lower() and user.sucursal
+
+    if qs_ventas is not None:
+        if not user.is_superuser and user.empresa:
+            qs_ventas = qs_ventas.filter(turno__operador__empresa=user.empresa)
+            if es_gerente:
+                qs_ventas = qs_ventas.filter(turno__isla__sucursal=user.sucursal)
+        return qs_ventas
+
+    if qs_turnos is not None:
+        if not user.is_superuser and user.empresa:
+            qs_turnos = qs_turnos.filter(operador__empresa=user.empresa)
+            if es_gerente:
+                qs_turnos = qs_turnos.filter(isla__sucursal=user.sucursal)
+        return qs_turnos
+
+    if qs_sucursales is not None:
+        if not user.is_superuser and user.empresa:
+            qs_sucursales = qs_sucursales.filter(empresa=user.empresa)
+            if es_gerente:
+                qs_sucursales = qs_sucursales.filter(id=user.sucursal.id)
+        return qs_sucursales
+
+    if qs_islas is not None:
+        if not user.is_superuser and user.empresa:
+            qs_islas = qs_islas.filter(sucursal__empresa=user.empresa)
+            if es_gerente:
+                qs_islas = qs_islas.filter(sucursal=user.sucursal)
+        return qs_islas
 
 # ── Reporte de Ventas ─────────────────────────────────────────────────────────
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, ReportesPermiso])
 def reporte_ventas(request):
     qs = _filtrar_ventas(request.query_params)
-    if not request.user.is_superuser and request.user.empresa:
-        qs = qs.filter(turno__operador__empresa=request.user.empresa)
+    qs = _filtrar_por_rol(request.user, qs_ventas=qs)
     # Totales generales
     totales = qs.aggregate(
         total_recaudado=Coalesce(Sum('total'), Decimal('0')),
@@ -85,6 +116,7 @@ def reporte_ventas(request):
 
     # Ventas anuladas (sin filtro de estado para incluirlas)
     qs_todas = Venta.objects.all()
+    qs_todas = _filtrar_por_rol(request.user, qs_ventas=qs_todas)
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
     sucursal_id  = request.query_params.get('sucursal_id')
@@ -120,8 +152,7 @@ def reporte_ventas(request):
 def reporte_turnos(request):
 
     qs = Turno.objects.select_related('operador', 'isla')
-    if not request.user.is_superuser and request.user.empresa:
-        qs = qs.filter(operador__empresa=request.user.empresa)
+    qs = _filtrar_por_rol(request.user, qs_turnos=qs)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -190,8 +221,7 @@ def reporte_turnos(request):
 def reporte_clientes(request):
 
     qs = Venta.objects.filter(estado='COMPLETADA', cliente__isnull=False)
-    if not request.user.is_superuser and request.user.empresa:
-        qs = qs.filter(turno__operador__empresa=request.user.empresa)
+    qs = _filtrar_por_rol(request.user, qs_ventas=qs)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -249,8 +279,7 @@ def reporte_clientes(request):
 def reporte_sucursales(request):
 
     sucursales_qs = Sucursal.objects.all()
-    if not request.user.is_superuser and request.user.empresa:
-        sucursales_qs = sucursales_qs.filter(empresa=request.user.empresa)
+    sucursales_qs = _filtrar_por_rol(request.user, qs_sucursales=sucursales_qs)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -303,8 +332,7 @@ def reporte_sucursales(request):
 def reporte_islas(request):
 
     islas_qs = Isla.objects.prefetch_related('lados').select_related('sucursal')
-    if not request.user.is_superuser and request.user.empresa:
-        islas_qs = islas_qs.filter(sucursal__empresa=request.user.empresa)
+    islas_qs = _filtrar_por_rol(request.user, qs_islas=islas_qs)
 
     fecha_inicio = request.query_params.get('fecha_inicio')
     fecha_fin    = request.query_params.get('fecha_fin')
@@ -488,6 +516,6 @@ JSON:"""
             status=422,
         )
 
-    registrar_bitacora(request, f'Interpretó comando de voz: "{texto[:100]}"')
+    registrar_bitacora(request, request.user, f'Interpretó comando de voz: "{texto[:100]}"')
 
     return Response(resultado)

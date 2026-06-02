@@ -5,10 +5,12 @@ clientes, ventas, vehículos, sucursales y consolidación de caja.
 """
 
 from rest_framework import viewsets, status
+from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
@@ -26,18 +28,115 @@ import requests # Para llamadas a la API de PlateRecognizer
 
 from usuarios import models
 from django.db.models import Max
-from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo,EmpresaCliente
+from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo, CompraCombustible, EmpresaCliente
+
 
 from backend.settings import TOKEN_PLATERECOGNIZER # Importar el token desde settings.py para usarlo en la función de procesamiento de imágenes
 
 from .serializers import (
-    ConsolidacionCajaSerializer, SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
-    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer,
-    TicketVentaSerializer
+    SucursalSerializer, IslaSerializer, LadoSerializer, TipoCombustibleSerializer,
+    TurnoSerializer, ClienteSerializer, VentaSerializer, RegistrarVentaSerializer,
+    TicketVentaSerializer, VehiculoSerializer, RegistrarClienteVehiculoSerializer,
+
+    ConsolidacionCajaSerializer, CompraCombustibleSerializer
+
 )
 from utils.permissions import HasPermiso
 from seguridad.models import Bitacora ,registrar_bitacora
 from usuarios.models import Usuario, Rol
+
+from .client_linking import resolve_cliente_for_sale, resolve_cliente_for_usuario
+
+
+class PreciosCombustibleView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        combustibles = TipoCombustible.objects.filter(activo=True).order_by('tipo')
+        data = []
+        for combustible in combustibles:
+            unidad = 'mm3' if combustible.tipo == 'GNV' else 'Lt'
+            data.append({
+                'codigo': combustible.tipo,
+                'nombre': combustible.get_tipo_display(),
+                'precio_unitario': str(combustible.precio_litro),
+                'unidad': unidad,
+                'updated_at': combustible.updated_at,
+            })
+        return Response(data)
+
+class ComprasViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, GenericViewSet):
+    serializer_class = CompraCombustibleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return CompraCombustible.objects.filter(
+            created_by=self.request.user
+        ).select_related('tipo_combustible')
+
+    def list(self, request, *args, **kwargs):
+        items = []
+        seen = set()
+
+        compras = self.get_queryset()
+        compras_data = CompraCombustibleSerializer(compras, many=True, context={'request': request}).data
+        for compra in compras_data:
+            key = f"compra:{compra.get('id')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(compra)
+
+        cliente = resolve_cliente_for_usuario(
+            request.user,
+            create_if_missing=(
+                (not request.user.is_staff) and
+                (not request.user.is_superuser) and
+                (request.user.sucursal_id is None)
+            ),
+        )
+
+        ventas = Venta.objects.filter(
+            created_by=request.user,
+            estado='COMPLETADA',
+        ).select_related('tipo_combustible')
+
+        if cliente is not None:
+            ventas = (ventas | Venta.objects.filter(
+                cliente_id=cliente.id,
+                estado='COMPLETADA',
+            ).select_related('tipo_combustible'))
+
+        for venta in ventas:
+            unidad = 'mm3' if venta.tipo_combustible.tipo == 'GNV' else 'Lt'
+            observacion = ''
+            key = f"venta:{venta.id}"
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append({
+                'id': venta.id,
+                'tipo_combustible': venta.tipo_combustible.tipo,
+                'cantidad': str(venta.litros),
+                'unidad': unidad,
+                'precio_unitario': str(venta.precio_unitario),
+                'total': str(venta.total),
+                'fecha_hora': venta.fecha_hora.isoformat(),
+                'observacion': observacion,
+                'combustible_detalle': {'nombre': venta.tipo_combustible.get_tipo_display()},
+            })
+
+        items.sort(key=lambda x: x.get('fecha_hora', ''), reverse=True)
+        page = self.paginate_queryset(items)
+        if page is not None:
+            return self.get_paginated_response(page)
+        return Response(items)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        compra = serializer.save()
+        return Response(CompraCombustibleSerializer(compra, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 class IslaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar islas con lados activos y control de permisos."""
@@ -246,9 +345,11 @@ class TurnoViewSet(viewsets.ModelViewSet):
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes activos con creación automática de credenciales."""
     queryset = Cliente.objects.filter(activo=True)
+
     serializer_class = ClienteSerializer
     permission_classes = [IsAuthenticated, HasPermiso]
     permiso_requerido = 'clientes.ver'
+
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
@@ -259,6 +360,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 empresa_clientes__empresa=user.empresa
             ).distinct()
         return Cliente.objects.none()
+
     def get_permissions(self):
         """Asigna permisos específicos según la acción."""
         if self.action == 'create':
@@ -312,10 +414,13 @@ class ClienteViewSet(viewsets.ModelViewSet):
                 if rol_cliente:
                     usuario.roles.add(rol_cliente)
 
+                cliente.usuario = usuario
+
                 credenciales = {
                     'email': email_generado,
                     'password': ci,
                 }
+
                 registrar_bitacora(
                     request,
                     accion='CREAR',
@@ -387,6 +492,13 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         data = serializer.validated_data
 
+        client_request_id = data.get('client_request_id')
+        if client_request_id:
+            existente = Venta.objects.filter(created_by=request.user, client_request_id=client_request_id).first()
+            if existente:
+                return Response(VentaSerializer(existente).data, status=status.HTTP_200_OK)
+
+
         try:
             turno = Turno.objects.get(operador=request.user, estado='ABIERTO')
         except Turno.DoesNotExist:
@@ -424,6 +536,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         if data.get('cliente_id'):
             try:
                 cliente = Cliente.objects.get(id=data['cliente_id'], activo=True)
+
+                cliente = resolve_cliente_for_sale(cliente)
                 if data['metodo_pago'] == 'CREDITO_FLEET' and total is not None:
                     if total > cliente.saldo_credito:
                         return Response(
@@ -436,6 +550,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Cliente no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
 
         numero_comprobante = f"VTA-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
 
         venta = Venta.objects.create(
             turno=turno,
@@ -460,8 +575,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             if tanque and litros:
                 tanque.nivel_actual = max(0, float(tanque.nivel_actual) - float(litros))
                 tanque.save()
+                # Notificar si nivel crítico
+            if tanque.en_alerta:
+                from utils.onesignal import notificar_nivel_critico
+                notificar_nivel_critico(tanque)
         except Exception:
             pass
+
         desc = f'Lleno - {tipo_combustible.get_tipo_display()}' if es_lleno else \
             f'Registró venta de {litros} Lt de {tipo_combustible.get_tipo_display()} - Bs. {total}'
 
@@ -504,6 +624,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             return Response(VentaSerializer(ventas, many=True).data)
         except Turno.DoesNotExist:
             return Response({'ventas': [], 'mensaje': 'No tienes turno abierto'})
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def ticket(self, request, pk=None):
+        """Obtiene el ticket/comprobante de una venta específica."""
+        venta = self.get_object()
+        serializer = TicketVentaSerializer(venta)
+        return Response(serializer.data)
 class VehiculoViewSet(GenericViewSet):
     """ViewSet para gestionar vehículos y búsqueda por placa."""
     queryset = Vehiculo.objects.select_related('cliente').all()
@@ -927,5 +1054,5 @@ class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
                 modulo='Venta y POS',
                 descripcion=f'Consolidación de Caja - Turno #{turno.id}',
             )
-        
         return Response({'mensaje': 'Turno consolidado correctamente'})
+

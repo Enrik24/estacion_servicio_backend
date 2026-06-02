@@ -9,6 +9,11 @@ from decimal import Decimal
 from ventas.models import Isla, Lado, Turno, Sucursal, Venta, TipoCombustible, Cliente
 from inventario.models import Tanque
 
+<<<<<<< HEAD
+=======
+from utils.onesignal import enviar_notificacion
+from ventas.models import Isla, Lado, Turno, Sucursal
+>>>>>>> origin/enriqSPR2
 from usuarios.models import Usuario
 from seguridad.models import registrar_bitacora
 from .models import EstadoSurtidor, HistorialEstadoSurtidor
@@ -184,6 +189,7 @@ class MonitoreoViewSet(viewsets.ViewSet):
             cambiado_por=None,  # Fue automatizado por el hardware/sistema IA
         )
 
+<<<<<<< HEAD
         # NOTA ARQUITECTÓNICA DE EXPOSICIÓN:
         # Aquí es donde mandarías a llamar a tus servicios de WebSockets (Django Channels)
         # o Notificaciones Push (Firebase Cloud Messaging) para alertar al operador en pista:
@@ -196,6 +202,31 @@ class MonitoreoViewSet(viewsets.ViewSet):
             'combustible': 'Gasolina Especial'
         }, status=status.HTTP_200_OK)
 
+=======
+        # Actualizar estado
+        estado_obj.estado = nuevo_estado
+        estado_obj.descripcion_falla = descripcion if nuevo_estado == 'FALLA' else None
+        estado_obj.reportado_por = request.user
+        if nuevo_estado == 'ACTIVO' and estado_anterior == 'FALLA':
+            estado_obj.fecha_resolucion = timezone.now()
+        estado_obj.save()
+        if nuevo_estado == 'FALLA':
+            from utils.onesignal import notificar_falla_surtidor
+            notificar_falla_surtidor(lado, descripcion, request.user)
+        registrar_bitacora(
+            request,
+            accion='EDITAR',
+            modulo='Monitoreo',
+            descripcion=f'Cambió estado de Isla {lado.isla.numero} Lado {lado.lado}: {estado_anterior} → {nuevo_estado}. {descripcion}',
+        )
+
+        return Response({
+            'mensaje': f'Estado actualizado a {nuevo_estado}',
+            'lado_id': lado_id,
+            'estado_anterior': estado_anterior,
+            'estado_nuevo': nuevo_estado,
+        })
+>>>>>>> origin/enriqSPR2
     @action(detail=False, methods=['get'])
     def historial(self, request):
         """Retorna el historial de cambios de estado de surtidores."""

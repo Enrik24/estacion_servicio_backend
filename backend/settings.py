@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     
     # Local apps
@@ -54,7 +55,6 @@ INSTALLED_APPS = [
     'seguridad',
     'utils',
     'ventas',
-    'backup',
     'reportes',
 ]
 
@@ -95,7 +95,9 @@ ASGI_APPLICATION = 'backend.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-USE_SQLITE = config('USE_SQLITE', default=False, cast=bool)
+
+USE_SQLITE = config('USE_SQLITE', default=True, cast=bool)
+
 
 if USE_SQLITE:
     DATABASES = {
@@ -207,9 +209,15 @@ TOKEN_PLATERECOGNIZER = config('TOKEN_PLATERECOGNIZER', default=None)
 # Email (SMTP Gmail)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
+EMAIL_PORT = 465
 EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_TIMEOUT = 20
+
 EMAIL_HOST_USER = config('EMAIL_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_PASS')
+# OneSignal
+ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
+ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
 DEFAULT_FROM_EMAIL = config('EMAIL_USER')
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+FRONTEND_URL = config('FRONTEND_URL')

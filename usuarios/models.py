@@ -108,6 +108,11 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     nombre = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
 
+    email_verificado = models.BooleanField(default=True)
+    email_verificado_at = models.DateTimeField(null=True, blank=True)
+    acepta_politica_privacidad_at = models.DateTimeField(null=True, blank=True)
+
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
@@ -231,6 +236,7 @@ class LimiteConsumo(models.Model):
 
     def __str__(self):
         return f"{self.cliente.email} - {self.tipo} ({self.unidad}: {self.valor})"
+
 class PasswordResetToken(models.Model):
     id = models.BigAutoField(primary_key=True)
     usuario = models.ForeignKey(

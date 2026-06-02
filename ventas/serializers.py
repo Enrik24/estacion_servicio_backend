@@ -5,7 +5,8 @@ und realizar validaciones en las operaciones CRUD de venta, clientes, turnos e i
 """
 
 from rest_framework import serializers
-from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta,Vehiculo
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta, Vehiculo, CompraCombustible
+
 from django.db.models import Sum, Case, When, DecimalField
 
 
@@ -59,9 +60,34 @@ class TurnoSerializer(serializers.ModelSerializer):
 
 class ClienteSerializer(serializers.ModelSerializer):
     """Serializador básico para el modelo Cliente."""
+    usuario_id = serializers.IntegerField(source='usuario.id', read_only=True)
+    cuenta_movil_email = serializers.SerializerMethodField()
+    historial_movil_habilitado = serializers.SerializerMethodField()
+
     class Meta:
         model = Cliente
-        fields = '__all__'
+        fields = [
+            'id',
+            'nombre',
+            'nit',
+            'email',
+            'usuario_id',
+            'telefono',
+            'limite_credito',
+            'saldo_credito',
+            'activo',
+            'created_at',
+            'cuenta_movil_email',
+            'historial_movil_habilitado',
+        ]
+
+    def get_cuenta_movil_email(self, obj):
+        if obj.usuario_id and obj.usuario:
+            return obj.usuario.email
+        return obj.email or ''
+
+    def get_historial_movil_habilitado(self, obj):
+        return bool(obj.usuario_id or obj.email)
 
 
 class VentaSerializer(serializers.ModelSerializer):
@@ -76,6 +102,71 @@ class VentaSerializer(serializers.ModelSerializer):
         model = Venta
         fields = '__all__'
         read_only_fields = ['total', 'precio_unitario', 'numero_comprobante', 'fecha_hora', 'created_by']
+
+
+
+class CompraCombustibleSerializer(serializers.ModelSerializer):
+    tipo_combustible = serializers.CharField()
+    combustible_detalle = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompraCombustible
+        fields = [
+            'id',
+            'tipo_combustible',
+            'cantidad',
+            'unidad',
+            'precio_unitario',
+            'total',
+            'fecha_hora',
+            'observacion',
+            'combustible_detalle',
+        ]
+        read_only_fields = ['unidad', 'precio_unitario', 'total', 'fecha_hora', 'combustible_detalle']
+
+    def get_combustible_detalle(self, obj):
+        return {'nombre': obj.tipo_combustible.get_tipo_display()}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['tipo_combustible'] = instance.tipo_combustible.tipo
+        if data.get('observacion') is None:
+            data['observacion'] = ''
+        return data
+
+    def create(self, validated_data):
+        codigo = (validated_data.get('tipo_combustible') or '').strip()
+        if not codigo:
+            raise serializers.ValidationError({'tipo_combustible': 'Debes seleccionar un tipo de combustible.'})
+
+        try:
+            tipo = TipoCombustible.objects.get(tipo=codigo, activo=True)
+        except TipoCombustible.DoesNotExist:
+            raise serializers.ValidationError({'tipo_combustible': 'Tipo de combustible no encontrado o inactivo.'})
+
+        unidad = 'mm3' if tipo.tipo == 'GNV' else 'Lt'
+        cantidad = validated_data.get('cantidad')
+        if cantidad is None or cantidad <= 0:
+            raise serializers.ValidationError({'cantidad': 'Ingresa una cantidad válida.'})
+
+        precio_unitario = tipo.precio_litro
+        total = cantidad * precio_unitario
+
+        request = self.context.get('request')
+        created_by = getattr(request, 'user', None)
+        if created_by is None or not getattr(created_by, 'is_authenticated', False):
+            raise serializers.ValidationError('Usuario no autenticado.')
+        observacion = validated_data.get('observacion') or ''
+
+        return CompraCombustible.objects.create(
+            tipo_combustible=tipo,
+            cantidad=cantidad,
+            unidad=unidad,
+            precio_unitario=precio_unitario,
+            total=total,
+            observacion=observacion,
+            created_by=created_by,
+        )
 
 
 class RegistrarVentaSerializer(serializers.Serializer):
@@ -93,6 +184,8 @@ class RegistrarVentaSerializer(serializers.Serializer):
     metodo_pago = serializers.ChoiceField(choices=Venta.METODOS_PAGO)
     cliente_id = serializers.IntegerField(required=False, allow_null=True)
     es_lleno = serializers.BooleanField(default=False)
+    client_request_id = serializers.UUIDField(required=False, allow_null=True)
+
 
     def validate_tipo_combustible_id(self, value):
         """Valida que el tipo de combustible exista y esté activo."""
@@ -188,6 +281,71 @@ class SucursalSerializer(serializers.ModelSerializer):
         if gerente:
             return {'id': gerente.id, 'nombre': gerente.nombre}
         return None  
+
+# TICKET
+class TicketVentaSerializer(serializers.ModelSerializer):
+    comprobante = serializers.SerializerMethodField()
+    sucursal = serializers.SerializerMethodField()
+    despacho = serializers.SerializerMethodField()
+    operador = serializers.SerializerMethodField()
+    combustible = serializers.SerializerMethodField()
+    pago = serializers.SerializerMethodField()
+    cliente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Venta
+        fields = ['comprobante', 'sucursal', 'despacho', 'operador', 'combustible', 'pago', 'cliente']
+
+    def get_comprobante(self, obj):
+        return {
+            'numero': obj.numero_comprobante,
+            'fecha_hora': obj.fecha_hora,
+            'estado': obj.estado,
+        }
+
+    def get_sucursal(self, obj):
+        sucursal = obj.turno.isla.sucursal
+        if not sucursal:
+            return None
+        return {
+            'nombre': sucursal.nombre,
+            'direccion': sucursal.direccion,
+            'telefono': sucursal.telefono,
+            'nit': sucursal.nit,
+        }
+
+    def get_despacho(self, obj):
+        return {
+            'isla': obj.turno.isla.numero,
+            'lado': obj.lado.lado,
+            'horario': obj.turno.get_horario_display(),
+        }
+
+    def get_operador(self, obj):
+        return {
+            'nombre': obj.created_by.nombre,
+        }
+
+    def get_combustible(self, obj):
+        return {
+            'tipo': obj.tipo_combustible.get_tipo_display(),
+            'litros': str(obj.litros),
+            'precio_unitario': str(obj.precio_unitario),
+            'total': str(obj.total),
+        }
+
+    def get_pago(self, obj):
+        return {
+            'metodo': obj.get_metodo_pago_display(),
+        }
+
+    def get_cliente(self, obj):
+        if not obj.cliente:
+            return None
+        return {
+            'nombre': obj.cliente.nombre,
+            'nit': obj.cliente.nit,
+        }
 
 class ConsolidacionCajaSerializer(serializers.Serializer):
     """Serializador para reportes de consolidación de caja.
@@ -437,72 +595,4 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
             'gasolina_premium': round(resultado['gasolina_premium'], 2),
             'diesel': round(resultado['diesel'], 2),
             'gnv': round(resultado['gnv'], 2)
-        }
-        
-        return obj.islas.count()
-
-
-# TICKET
-class TicketVentaSerializer(serializers.ModelSerializer):
-    comprobante = serializers.SerializerMethodField()
-    sucursal = serializers.SerializerMethodField()
-    despacho = serializers.SerializerMethodField()
-    operador = serializers.SerializerMethodField()
-    combustible = serializers.SerializerMethodField()
-    pago = serializers.SerializerMethodField()
-    cliente = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Venta
-        fields = ['comprobante', 'sucursal', 'despacho', 'operador', 'combustible', 'pago', 'cliente']
-
-    def get_comprobante(self, obj):
-        return {
-            'numero': obj.numero_comprobante,
-            'fecha_hora': obj.fecha_hora,
-            'estado': obj.estado,
-        }
-
-    def get_sucursal(self, obj):
-        sucursal = obj.turno.isla.sucursal
-        if not sucursal:
-            return None
-        return {
-            'nombre': sucursal.nombre,
-            'direccion': sucursal.direccion,
-            'telefono': sucursal.telefono,
-            'nit': sucursal.nit,
-        }
-
-    def get_despacho(self, obj):
-        return {
-            'isla': obj.turno.isla.numero,
-            'lado': obj.lado.lado,
-            'horario': obj.turno.get_horario_display(),
-        }
-
-    def get_operador(self, obj):
-        return {
-            'nombre': obj.created_by.nombre,
-        }
-
-    def get_combustible(self, obj):
-        return {
-            'tipo': obj.tipo_combustible.get_tipo_display(),
-            'litros': str(obj.litros),
-            'precio_unitario': str(obj.precio_unitario),
-            'total': str(obj.total),
-        }
-
-    def get_pago(self, obj):
-        return {
-            'metodo': obj.get_metodo_pago_display(),
-        }
-
-    def get_cliente(self, obj):
-        if not obj.cliente:
-            return None
-        return {
-            'nombre': obj.cliente.nombre,
-            'nit': obj.cliente.nit,
         }

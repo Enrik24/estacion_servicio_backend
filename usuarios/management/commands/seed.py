@@ -1,14 +1,15 @@
 from django.core.management.base import BaseCommand
-from usuarios.models import Permiso, Rol, Usuario
+from usuarios.models import Permiso, Rol, Usuario, Empresa
+from ventas.models import Isla, Lado, TipoCombustible, Sucursal, Cliente, Vehiculo, EmpresaCliente
 
 
 class Command(BaseCommand):
-    help = 'Seeder para permisos, roles y usuarios iniciales de la gasolinera'
+    help = 'Seeder principal del sistema'
 
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.NOTICE('Iniciando seed...'))
-        
-        # Crear permisos
+
+        # ── Permisos ──────────────────────────────────────────────────────────
         permisos_data = [
             # Permisos de usuarios
             {'codigo': 'usuarios.ver', 'nombre': 'Ver Usuarios', 'descripcion': 'Permiso para ver usuarios'},
@@ -58,28 +59,119 @@ class Command(BaseCommand):
             # Permiso de admin (NUEVO - middleware de seguridad)
             {'codigo': 'admin.acceso', 'nombre': 'Acceso al Panel Admin', 'descripcion': 'Permiso para acceder al panel de administración de Django'},
         ]
-        
+
         permisos_creados = {}
-        for permiso_data in permisos_data:
-            permiso, created = Permiso.objects.get_or_create(
-                codigo=permiso_data['codigo'],
-                defaults={
-                    'nombre': permiso_data['nombre'],
-                    'descripcion': permiso_data['descripcion']
-                }
+        for p in permisos_data:
+            obj, created = Permiso.objects.get_or_create(
+                codigo=p['codigo'],
+                defaults={'nombre': p['nombre'], 'descripcion': p['nombre']}
             )
-            permisos_creados[permiso_data['codigo']] = permiso
+            permisos_creados[p['codigo']] = obj
             if created:
-                self.stdout.write(self.style.SUCCESS(f'Permiso creado: {permiso.nombre}'))
-            else:
-                self.stdout.write(f'Permiso ya existe: {permiso.nombre}')
-        
-        # Crear roles
+                self.stdout.write(self.style.SUCCESS(f'  Permiso creado: {p["codigo"]}'))
+
+        # ── Roles ─────────────────────────────────────────────────────────────
+        todos = list(permisos_creados.values())
+
+        permisos_gerente = [permisos_creados.get(c) for c in [
+            'usuarios.ver', 'usuarios.crear', 'usuarios.editar', 'usuarios.asignar_roles',
+            'roles.ver', 'permisos.ver', 'bitacora.ver',
+            'turnos.ver', 'turnos.abrir', 'turnos.cerrar',
+            'ventas.ver', 'ventas.registrar', 'ventas.anular',
+            'surtidores.ver', 'surtidores.crear', 'surtidores.editar',
+            'clientes.ver', 'clientes.crear', 'clientes.editar',
+            'sucursales.ver', 'sucursales.editar', 'reportes.ver',
+            'limites_consumo.ver', 'limites_consumo.crear', 'limites_consumo.editar',
+        ]]
+
+        permisos_operador = [permisos_creados.get(c) for c in [
+            'turnos.ver', 'turnos.abrir', 'turnos.cerrar',
+            'ventas.ver', 'ventas.registrar', 'ventas.anular',
+            'surtidores.ver', 'clientes.ver', 'clientes.crear',
+        ]]
+
+        permisos_auditor = [permisos_creados.get(c) for c in [
+            'bitacora.ver', 'ventas.ver', 'usuarios.ver',
+            'turnos.ver', 'clientes.ver', 'sucursales.ver',
+            'surtidores.ver', 'reportes.ver',
+        ]]
+
+        permisos_cliente = [permisos_creados.get(c) for c in [
+            'ventas.ver', 'clientes.ver',
+        ]]
+
         roles_data = [
+            {'nombre': 'Administrador', 'descripcion': 'Acceso total al sistema', 'permisos': todos},
+            {'nombre': 'Gerente', 'descripcion': 'Gestión de sucursal', 'permisos': permisos_gerente},
+            {'nombre': 'Operador', 'descripcion': 'Registro de ventas y turnos', 'permisos': permisos_operador},
+            {'nombre': 'Auditor', 'descripcion': 'Solo lectura', 'permisos': permisos_auditor},
+            {'nombre': 'Cliente', 'descripcion': 'Cliente de la estación', 'permisos': permisos_cliente},
+        ]
+
+        roles_creados = {}
+        for r in roles_data:
+            rol, created = Rol.objects.get_or_create(
+                nombre=r['nombre'],
+                defaults={'descripcion': r['descripcion']}
+            )
+            rol.permisos.set([p for p in r['permisos'] if p])
+            roles_creados[r['nombre']] = rol
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Rol creado: {r["nombre"]}'))
+
+        # ── Super Admin del sistema ───────────────────────────────────────────
+        superadmin, created = Usuario.objects.get_or_create(
+            email='superadmin@surtidor.com',
+            defaults={'nombre': 'Super Admin', 'is_superuser': True, 'is_staff': True, 'is_active': True}
+        )
+        if created:
+            superadmin.set_password('super123')
+            superadmin.save()
+            self.stdout.write(self.style.SUCCESS('  Super Admin creado'))
+
+        # ── Empresa ───────────────────────────────────────────────────────────
+        empresa, created = Empresa.objects.get_or_create(
+            nombre='Surtidor Octano',
+            defaults={
+                'nit': '1000000001',
+                'telefono': '3-4567890',
+                'email': 'contacto@surtidoroctano.com',
+                'direccion': 'Santa Cruz de la Sierra',
+                'plan': 'PROFESIONAL',
+                'estado': 'ACTIVA',
+            }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS('  Empresa creada: Surtidor Octano'))
+
+        # ── Tipos de combustible ──────────────────────────────────────────────
+        tipos_data = [
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
+            {'tipo': 'GASOLINA_PREMIUM',  'precio_litro': 11.00},
+            {'tipo': 'DIESEL',            'precio_litro': 9.80},
+        ]
+
+        tipos_creados = {}
+        for t in tipos_data:
+            obj, created = TipoCombustible.objects.get_or_create(
+                tipo=t['tipo'],
+                empresa=empresa,
+                defaults={'precio_litro': t['precio_litro'], 'activo': True}
+            )
+            tipos_creados[t['tipo']] = obj
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Combustible creado: {obj.get_tipo_display()}'))
+
+        # ── Sucursales ────────────────────────────────────────────────────────
+        sucursales_data = [
             {
-                'nombre': 'Administrador',
-                'descripcion': 'Rol con acceso total al sistema',
-                'permisos': list(permisos_creados.values())  # Todos los permisos
+                'nombre': 'Surtidor Octano - Norte',
+                'direccion': 'Av. Banzer 5to Anillo, Santa Cruz',
+                'telefono': '3-1234567',
+                'nit': '1000000002',
+                'cantidad_islas': 2,
+                'tiene_gnv': False,
+                'estado': 'ACTIVA',
             },
             {
                 'nombre': 'Cliente',
@@ -103,80 +195,178 @@ class Command(BaseCommand):
                 ]
             },
         ]
-        
-        roles_creados = {}
-        for rol_data in roles_data:
-            rol, created = Rol.objects.get_or_create(
-                nombre=rol_data['nombre'],
-                defaults={'descripcion': rol_data['descripcion']}
+
+        sucursales_creadas = {}
+        for s in sucursales_data:
+            suc, created = Sucursal.objects.get_or_create(
+                nombre=s['nombre'],
+                defaults={**s, 'empresa': empresa}
             )
+            if not created and not suc.empresa:
+                suc.empresa = empresa
+                suc.save()
+            sucursales_creadas[s['nombre']] = suc
             if created:
-                self.stdout.write(self.style.SUCCESS(f'Rol creado: {rol.nombre}'))
-            else:
-                self.stdout.write(f'Rol ya existe: {rol.nombre}')
-            
-            # Asignar permisos al rol
-            if rol_data['permisos']:
-                permisos_validos = [p for p in rol_data['permisos'] if p is not None]
-                rol.permisos.set(permisos_validos)
-                self.stdout.write(f'  -> Permisos asignados: {len(permisos_validos)}')
-            
-            roles_creados[rol_data['nombre']] = rol
-        
-        # Crear usuarios
+                self.stdout.write(self.style.SUCCESS(f'  Sucursal creada: {suc.nombre}'))
+                # Crear islas y lados
+                for i in range(1, s['cantidad_islas'] + 1):
+                    isla = Isla.objects.create(numero=i, sucursal=suc, estado='ACTIVO')
+                    Lado.objects.create(isla=isla, lado='A', activo=True)
+                    Lado.objects.create(isla=isla, lado='B', activo=True)
+                    self.stdout.write(self.style.SUCCESS(f'    Isla {i} creada con lados A y B'))
+
+        suc_norte = sucursales_creadas.get('Surtidor Octano - Norte')
+        suc_oeste = sucursales_creadas.get('Surtidor Octano - Oeste')
+
+        # ── Usuarios ──────────────────────────────────────────────────────────
         usuarios_data = [
             {
-                'nombre': 'admin',
-                'email': 'admin@gmail.com',
+                'nombre': 'Administrador',
+                'email': 'admin@estacion.com',
                 'password': 'admin123',
-                'is_superuser': True,
+                'is_superuser': False,
                 'is_staff': True,
-                'rol': 'Administrador'
+                'rol': 'Administrador',
+                'empresa': empresa,
+                'sucursal': None,
             },
             {
-                'nombre': 'Juan Cliente',
-                'email': 'juan.cliente@gmail.com',
-                'password': 'cliente123',
+                'nombre': 'Gerente Norte',
+                'email': 'gerente.norte@estacion.com',
+                'password': 'gerente123',
+                'is_superuser': False,
+                'is_staff': True,
+                'rol': 'Gerente',
+                'empresa': empresa,
+                'sucursal': suc_norte,
+            },
+            {
+                'nombre': 'Gerente Oeste',
+                'email': 'gerente.oeste@estacion.com',
+                'password': 'gerente123',
+                'is_superuser': False,
+                'is_staff': True,
+                'rol': 'Gerente',
+                'empresa': empresa,
+                'sucursal': suc_oeste,
+            },
+            {
+                'nombre': 'Operador Norte',
+                'email': 'operador.norte@estacion.com',
+                'password': 'operador123',
                 'is_superuser': False,
                 'is_staff': False,
-                'rol': 'Cliente'
+                'rol': 'Operador',
+                'empresa': empresa,
+                'sucursal': suc_norte,
             },
             {
-                'nombre': 'Maria Empleada',
-                'email': 'maria.empleada@gmail.com',
-                'password': 'empleado123',
+                'nombre': 'Operador Oeste',
+                'email': 'operador.oeste@estacion.com',
+                'password': 'operador123',
                 'is_superuser': False,
-                'is_staff': True,
-                'rol': 'Empleado'
+                'is_staff': False,
+                'rol': 'Operador',
+                'empresa': empresa,
+                'sucursal': suc_oeste,
+            },
+            {
+                'nombre': 'Auditor Demo',
+                'email': 'auditor@estacion.com',
+                'password': 'auditor123',
+                'is_superuser': False,
+                'is_staff': False,
+                'rol': 'Auditor',
+                'empresa': empresa,
+                'sucursal': None,
             },
         ]
-        
-        for usuario_data in usuarios_data:
-            email = usuario_data['email']
-            rol_nombre = usuario_data.pop('rol')
-            password = usuario_data.pop('password')
-            
-            usuario, created = Usuario.objects.get_or_create(
-                email=email,
+
+        usuarios_creados = {}
+        for u in usuarios_data:
+            obj, created = Usuario.objects.get_or_create(
+                email=u['email'],
                 defaults={
-                    'nombre': usuario_data['nombre'],
-                    'is_superuser': usuario_data['is_superuser'],
-                    'is_staff': usuario_data['is_staff'],
-                    'is_active': True
+                    'nombre': u['nombre'],
+                    'is_superuser': u['is_superuser'],
+                    'is_staff': u['is_staff'],
+                    'is_active': True,
+                    'empresa': u['empresa'],
+                    'sucursal': u['sucursal'],
                 }
             )
-            
             if created:
-                usuario.set_password(password)
-                usuario.save()
-                self.stdout.write(self.style.SUCCESS(f'Usuario creado: {usuario.nombre} ({email})'))
-            else:
-                self.stdout.write(f'Usuario ya existe: {usuario.nombre} ({email})')
-            
-            # Asignar rol
-            rol = roles_creados.get(rol_nombre)
+                obj.set_password(u['password'])
+                obj.save()
+                self.stdout.write(self.style.SUCCESS(f'  Usuario creado: {obj.nombre}'))
+            rol = roles_creados.get(u['rol'])
             if rol:
-                usuario.roles.set([rol])
-                self.stdout.write(f'  -> Rol asignado: {rol_nombre}')
-        
-        self.stdout.write(self.style.SUCCESS('\nSeed completado exitosamente!'))
+                obj.roles.set([rol])
+            usuarios_creados[u['email']] = obj
+
+        # ── Clientes y Vehículos ──────────────────────────────────────────────
+        clientes_data = [
+            {
+                'nombre': 'Juan Pérez',
+                'nit': '12345678',
+                'telefono': '71234567',
+                'placa': '1234-ABC',
+                'marca': 'Toyota',
+                'modelo': 'Corolla',
+                'color': 'Blanco',
+            },
+            {
+                'nombre': 'María López',
+                'nit': '87654321',
+                'telefono': '76543210',
+                'placa': '5678-XYZ',
+                'marca': 'Nissan',
+                'modelo': 'Sentra',
+                'color': 'Rojo',
+            },
+            {
+                'nombre': 'Transportes Andes SRL',
+                'nit': '55566677',
+                'telefono': '44556677',
+                'placa': '9999-TRP',
+                'marca': 'Mercedes',
+                'modelo': 'Sprinter',
+                'color': 'Blanco',
+            },
+        ]
+
+        for c in clientes_data:
+            cliente, created = Cliente.objects.get_or_create(
+                nit=c['nit'],
+                defaults={
+                    'nombre': c['nombre'],
+                    'telefono': c['telefono'],
+                    'activo': True,
+                }
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  Cliente creado: {cliente.nombre}'))
+                Vehiculo.objects.get_or_create(
+                    placa=c['placa'],
+                    defaults={
+                        'cliente': cliente,
+                        'marca': c['marca'],
+                        'modelo': c['modelo'],
+                        'color': c['color'],
+                        'activo': True,
+                    }
+                )
+                self.stdout.write(self.style.SUCCESS(f'    Vehículo creado: {c["placa"]}'))
+            # Asociar cliente a la empresa
+            EmpresaCliente.objects.get_or_create(empresa=empresa, cliente=cliente)
+
+        # ── Resumen ───────────────────────────────────────────────────────────
+        self.stdout.write(self.style.SUCCESS('\n✅ Seed completado exitosamente!'))
+        self.stdout.write(self.style.NOTICE('\nCredenciales:'))
+        self.stdout.write('  Super Admin:     superadmin@surtidor.com     / super123')
+        self.stdout.write('  Admin:           admin@estacion.com           / admin123')
+        self.stdout.write('  Gerente Norte:   gerente.norte@estacion.com   / gerente123')
+        self.stdout.write('  Gerente Oeste:   gerente.oeste@estacion.com   / gerente123')
+        self.stdout.write('  Operador Norte:  operador.norte@estacion.com  / operador123')
+        self.stdout.write('  Operador Oeste:  operador.oeste@estacion.com  / operador123')
+        self.stdout.write('  Auditor:         auditor@estacion.com         / auditor123')

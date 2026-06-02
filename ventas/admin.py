@@ -1,7 +1,10 @@
 from django.contrib import admin
-from .models import Surtidor, Turno, Cliente, Venta
+from .models import Sucursal, Isla, Lado, TipoCombustible, Turno, Cliente, Venta
 
-admin.site.register(Surtidor)
+admin.site.register(Sucursal)
+admin.site.register(Isla)
+admin.site.register(Lado)
+admin.site.register(TipoCombustible)
 admin.site.register(Turno)
 admin.site.register(Cliente)
 admin.site.register(Venta)

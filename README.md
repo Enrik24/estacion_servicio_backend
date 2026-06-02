@@ -78,6 +78,7 @@ GROQ_API_KEY=tu-api-key-de-groq
 - `EMAIL_PASS`: clave o password de aplicacion del correo.
 - `FRONTEND_URL`: URL base del frontend para enlaces de verificacion.
 - `GROQ_API_KEY`: clave usada por integraciones IA del proyecto.
+- `TOKEN_PLATERECOGNIZER` : clave para integracion de IA LPR
 
 ## Base De Datos
 1. Crea la base de datos `db_gasolinera_v2` en PostgreSQL.

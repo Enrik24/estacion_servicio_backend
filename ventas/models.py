@@ -321,3 +321,64 @@ class EmpresaCliente(models.Model):
 
     def __str__(self):
         return f"{self.cliente.nombre} - {self.empresa.nombre}"
+
+class OrdenPrepago(models.Model):
+    ESTADOS = [
+        ('PENDIENTE', 'Pendiente'),
+        ('PROCESANDO_PAGO', 'Procesando Pago'),
+        ('PAGADO', 'Pagado'),
+        ('FALLIDO', 'Fallido'),
+        ('DESPACHADO', 'Despachado'),
+        ('RECHAZADO', 'Rechazado'),
+        ('VENCIDO', 'Vencido'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    numero_orden = models.CharField(max_length=25, unique=True, editable=False, null=True, blank=True)
+    cliente = models.ForeignKey('Cliente', on_delete=models.CASCADE, related_name='ordenes_prepago')
+    tipo_combustible = models.ForeignKey('TipoCombustible', on_delete=models.PROTECT, related_name='ordenes_prepago')
+    precio_por_litro = models.DecimalField(max_digits=10, decimal_places=2, help_text='Precio congelado al momento de la compra', null=True, blank=True)
+    monto_total = models.DecimalField(max_digits=12, decimal_places=2)
+    litros = models.DecimalField(max_digits=10, decimal_places=2)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='PENDIENTE')
+    stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True)
+    comprobante_pdf = models.FileField(upload_to='comprobantes/', null=True, blank=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_expiracion = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'ordenes_prepago'
+        verbose_name = 'Orden de Prepago'
+        verbose_name_plural = 'Órdenes de Prepago'
+        ordering = ['-fecha_creacion']
+
+    def __str__(self):
+        return f"Prepago {self.numero_orden} - {self.cliente.nombre} - Bs. {self.monto_total}"
+
+    def save(self, *args, **kwargs):
+        from django.utils import timezone
+        from datetime import timedelta
+        if not self.fecha_expiracion:
+            self.fecha_expiracion = timezone.now() + timedelta(hours=24)
+        if not self.numero_orden:
+            self.numero_orden = OrdenPrepago.generar_numero_orden()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def generar_numero_orden():
+        """Genera un número de orden con formato PRE-AAAAMMDD-XXXXX."""
+        from django.utils import timezone
+        hoy = timezone.now().strftime('%Y%m%d')
+        prefijo = f'PRE-{hoy}-'
+        ultima = OrdenPrepago.objects.filter(
+            numero_orden__startswith=prefijo
+        ).order_by('-numero_orden').first()
+        if ultima:
+            try:
+                ultimo_num = int(ultima.numero_orden.split('-')[-1])
+            except ValueError:
+                ultimo_num = 0
+            siguiente = ultimo_num + 1
+        else:
+            siguiente = 1
+        return f"{prefijo}{siguiente:05d}"

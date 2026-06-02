@@ -128,9 +128,22 @@ class UsuarioMeSerializer(serializers.ModelSerializer):
     roles_detalle = RolSerializer(source='roles', many=True, read_only=True)
     permisos = serializers.SerializerMethodField()
     
+    # Campos del Cliente
+    nit_ci = serializers.SerializerMethodField()
+    telefono = serializers.SerializerMethodField()
+    
+    # Campos del Vehículo
+    placa = serializers.SerializerMethodField()
+    marca = serializers.SerializerMethodField()
+    modelo = serializers.SerializerMethodField()
+    color = serializers.SerializerMethodField()
+    
     class Meta:
         model = Usuario
-        fields = ['id', 'nombre', 'email', 'is_active', 'roles', 'roles_detalle', 'permisos']
+        fields = [
+            'id', 'nombre', 'email', 'is_active', 'roles', 'roles_detalle', 'permisos',
+            'nit_ci', 'telefono', 'placa', 'marca', 'modelo', 'color'
+        ]
     
     def get_permisos(self, obj):
         permisos = set()
@@ -138,6 +151,40 @@ class UsuarioMeSerializer(serializers.ModelSerializer):
             for permiso in rol.permisos.all():
                 permisos.add(permiso.codigo)
         return list(permisos)
+    
+    def get_nit_ci(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            return obj.cliente_ventas.nit
+        return None
+    
+    def get_telefono(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            return obj.cliente_ventas.telefono
+        return None
+    
+    def get_placa(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            vehiculo = obj.cliente_ventas.vehiculos.filter(activo=True).first()
+            return vehiculo.placa if vehiculo else None
+        return None
+    
+    def get_marca(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            vehiculo = obj.cliente_ventas.vehiculos.filter(activo=True).first()
+            return vehiculo.marca if vehiculo else None
+        return None
+    
+    def get_modelo(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            vehiculo = obj.cliente_ventas.vehiculos.filter(activo=True).first()
+            return vehiculo.modelo if vehiculo else None
+        return None
+    
+    def get_color(self, obj):
+        if hasattr(obj, 'cliente_ventas') and obj.cliente_ventas:
+            vehiculo = obj.cliente_ventas.vehiculos.filter(activo=True).first()
+            return vehiculo.color if vehiculo else None
+        return None
 
 
 class CambiarPasswordSerializer(serializers.Serializer):

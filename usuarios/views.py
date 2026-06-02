@@ -159,18 +159,55 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             modulo='Administración y Seguridad',
             descripcion=f'Eliminó al usuario: {instance.email}',
         )
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsAuthenticated])
     def me(self, request):
+        if request.method == 'GET':
+            serializer = UsuarioMeSerializer(request.user)
+            return Response(serializer.data)
+
+        # PATCH
+        from ventas.models import Cliente, Vehiculo
+
+        serializer = UsuarioMeSerializer(request.user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+
+        # Actualizar campos del Cliente vinculado
+        campos_cliente = {}
+        if 'nit_ci' in request.data:
+            campos_cliente['nit'] = request.data['nit_ci']
+        if 'telefono' in request.data:
+            campos_cliente['telefono'] = request.data['telefono']
+
+        if campos_cliente:
+            cliente = getattr(request.user, 'cliente_ventas', None)
+            if cliente:
+                for campo, valor in campos_cliente.items():
+                    setattr(cliente, campo, valor)
+                cliente.save(update_fields=list(campos_cliente.keys()))
+
+        # Actualizar campos del Vehículo activo vinculado
+        campos_vehiculo = {}
+        for campo in ('placa', 'marca', 'modelo', 'color'):
+            if campo in request.data:
+                campos_vehiculo[campo] = request.data[campo]
+
+        if campos_vehiculo:
+            cliente = getattr(request.user, 'cliente_ventas', None)
+            if cliente:
+                vehiculo = cliente.vehiculos.filter(activo=True).first()
+                if vehiculo:
+                    for campo, valor in campos_vehiculo.items():
+                        setattr(vehiculo, campo, valor)
+                    vehiculo.save(update_fields=list(campos_vehiculo.keys()))
+                elif 'placa' in campos_vehiculo:
+                    # Si no tiene vehículo aún, lo crea
+                    Vehiculo.objects.create(cliente=cliente, **campos_vehiculo)
+
+        # Retornar los datos actualizados
         serializer = UsuarioMeSerializer(request.user)
         return Response(serializer.data)
-
-    @action(detail=False, methods=['patch'], permission_classes=[IsAuthenticated])
-    def update_me(self, request):
-        serializer = UsuarioMeSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def cambiar_password(self, request):

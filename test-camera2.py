@@ -5,8 +5,8 @@ import requests
 URL_DJANGO = "http://127.0.0.1:8000/api/vehiculos/procesar_imagen_lpr/"
 
 # RECUERDA: Cambiar esto por la IP exacta de tu DroidCam
-url_camara = "http://192.168.0.7:4747/video" 
-cap = cv2.VideoCapture(url_camara)
+url_camara = "http://10.128.112.138:4747/video" 
+cap = cv2.VideoCapture(url_camara) #cambiar a 0 ó 1
 
 print("Conectando a DroidCam y preparando sistema ligero...")
 

@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+from decouple import config
 #from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -222,8 +223,22 @@ EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = 20
 
 # OneSignal
-ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
-ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
+ONESIGNAL_APP_ID = config(
+    'ONESIGNAL_APP_ID',
+    default=''
+)
+
+ONESIGNAL_API_KEY = config(
+    'ONESIGNAL_API_KEY',
+    default=''
+)
+
+ONESIGNAL_ENABLED = bool(
+    ONESIGNAL_APP_ID and
+    ONESIGNAL_API_KEY
+)
+
+
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 CRONJOBS = [
     ('0 2 * * *', 'backup.crons.backup_automatico', '>> /tmp/backup_cron.log 2>&1'),

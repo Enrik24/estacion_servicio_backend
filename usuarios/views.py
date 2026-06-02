@@ -244,12 +244,16 @@ class ClienteViewSet(viewsets.ModelViewSet):
     filterset_fields = ['is_active']
 
     def get_queryset(self):
+        user = self.request.user
         queryset = Usuario.objects.filter(roles__nombre__iexact='Cliente').distinct().prefetch_related('roles')
+        
+        if not user.is_superuser and user.empresa:
+            queryset = queryset.filter(empresa=user.empresa)
+        
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(models.Q(nombre__icontains=search) | models.Q(email__icontains=search))
         return queryset
-
     def get_permissions(self):
         if self.action == 'create':
             return [IsAuthenticated(), HasPermiso(permiso='clientes.crear')]
@@ -268,17 +272,20 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         usuario = serializer.save()
         usuario.roles.set([self._obtener_rol_cliente()])
-        registrar_bitacora(self.request, accion='CREAR')
+        if not self.request.user.is_superuser and self.request.user.empresa:
+            usuario.empresa = self.request.user.empresa
+            usuario.save(update_fields=['empresa'])
+        registrar_bitacora(self.request, accion='CREAR', descripcion='Creó cliente')
 
     def perform_update(self, serializer):
         usuario = serializer.save()
         usuario.roles.set([self._obtener_rol_cliente()])
-        registrar_bitacora(self.request, accion='EDITAR')
+        registrar_bitacora(self.request, accion='EDITAR', descripcion='Editó cliente')
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active'])
-        registrar_bitacora(self.request, accion='ELIMINAR')
+        registrar_bitacora(self.request, accion='ELIMINAR', descripcion='Desactivó cliente')
 
 
 class LimiteConsumoViewSet(viewsets.ModelViewSet):
@@ -312,15 +319,15 @@ class LimiteConsumoViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save()
-        registrar_bitacora(self.request, accion='CREAR')
+        registrar_bitacora(self.request, accion='CREAR', descripcion='Creó límite de consumo')
 
     def perform_update(self, serializer):
         serializer.save()
-        registrar_bitacora(self.request, accion='EDITAR')
+        registrar_bitacora(self.request, accion='EDITAR', descripcion='Editó límite de consumo')
 
     def perform_destroy(self, instance):
         instance.delete()
-        registrar_bitacora(self.request, accion='ELIMINAR')
+        registrar_bitacora(self.request, accion='ELIMINAR', descripcion='Eliminó límite de consumo')
 
     @action(detail=False, methods=['post'])
     def validar_consumo(self, request):

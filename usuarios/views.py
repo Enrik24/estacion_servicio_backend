@@ -30,8 +30,8 @@ from ventas.client_linking import resolve_cliente_for_usuario
 
 
 
-def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None):
-    usuario_log = request.user if request.user.is_authenticated else None
+def registrar_bitacora(request, accion, estado='EXITO', usuario_objetivo=None, modulo=None, descripcion=None, usuario=None):
+    usuario_log = usuario or (request.user if request.user.is_authenticated else None)
     Bitacora.objects.create(
         usuario=usuario_log,
         usuario_email=getattr(usuario_log, 'email', None),

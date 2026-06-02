@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'backup',
     'monitoreo',
     'inventario',
+    'django_crontab',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -131,9 +133,9 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {'min_length': 8}
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+   # {
+   #     'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+   # },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
@@ -156,6 +158,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Media files (uploaded PDFs, receipts, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -207,18 +213,35 @@ CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bo
 
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
 
-# Email (SMTP Gmail)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
-EMAIL_TIMEOUT = 20
+# Email (Mailjet via django-anymail)
+# En desarrollo usa el backend de consola: el email se imprime en la terminal
+# En producción usa Mailjet con las claves reales
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'anymail.backends.mailjet.EmailBackend'
+    ANYMAIL = {
+        'MAILJET_API_KEY': config('MAILJET_API_KEY'),
+        'MAILJET_SECRET_KEY': config('MAILJET_SECRET_KEY'),
+    }
+DEFAULT_FROM_EMAIL = 'SurtidorBolivia <enriquemamani2403@gmail.com>'
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+PASSWORD_RESET_TIMEOUT = 86400  # 24 horas
 
-EMAIL_HOST_USER = config('EMAIL_USER')
-EMAIL_HOST_PASSWORD = config('EMAIL_PASS')
 # OneSignal
 ONESIGNAL_APP_ID = config('ONESIGNAL_APP_ID')
 ONESIGNAL_API_KEY = config('ONESIGNAL_API_KEY')
-DEFAULT_FROM_EMAIL = config('EMAIL_USER')
-FRONTEND_URL = config('FRONTEND_URL')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+CRONJOBS = [
+    ('0 2 * * *', 'backup.crons.backup_automatico', '>> /tmp/backup_cron.log 2>&1'),
+]
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY')
+
+# Stripe
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='sk_test_mock')
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='pk_test_mock')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# Prepago
+PREPAGO_MONTO_MAXIMO = config('PREPAGO_MONTO_MAXIMO', default=1000, cast=int)

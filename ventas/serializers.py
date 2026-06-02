@@ -596,3 +596,87 @@ class ConsolidacionCajaSerializer(serializers.Serializer):
             'diesel': round(resultado['diesel'], 2),
             'gnv': round(resultado['gnv'], 2)
         }
+
+class CompletarPerfilClienteSerializer(serializers.Serializer):
+    """Serializador para que un cliente web complete su perfil y registre su vehículo."""
+    nombre = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    nit = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    password = serializers.CharField(max_length=128, required=False, allow_blank=True, write_only=True)
+    placa = serializers.CharField(max_length=20)
+    marca = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    modelo = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    color = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+
+    def validate_password(self, value):
+        if value and len(value) < 6:
+            raise serializers.ValidationError('La contraseña debe tener al menos 6 caracteres.')
+        return value
+
+    def validate_placa(self, value):
+        placa = value.upper().strip()
+        cliente = self.context.get('cliente')
+        qs = Vehiculo.objects.filter(placa=placa)
+        if cliente:
+            qs = qs.exclude(cliente=cliente)
+        if qs.exists():
+            raise serializers.ValidationError('Ya existe un vehículo con esta placa registrado a otro cliente.')
+        return placa
+
+    def validate_nit(self, value):
+        if not value:
+            return value
+        cliente = self.context.get('cliente')
+        qs = Cliente.objects.filter(nit=value)
+        if cliente:
+            qs = qs.exclude(id=cliente.id)
+        if qs.exists():
+            raise serializers.ValidationError('Ya existe un cliente con este NIT.')
+        return value
+
+
+from .models import OrdenPrepago
+from rest_framework import serializers
+from django.conf import settings
+
+
+class OrdenPrepagoSerializer(serializers.ModelSerializer):
+    """Serializer de lectura para OrdenPrepago."""
+    cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    tipo_combustible_nombre = serializers.CharField(source='tipo_combustible.get_tipo_display', read_only=True)
+    comprobante_pdf_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrdenPrepago
+        fields = [
+            'id', 'numero_orden', 'cliente', 'cliente_nombre',
+            'tipo_combustible', 'tipo_combustible_nombre',
+            'precio_por_litro', 'monto_total', 'litros', 'estado',
+            'comprobante_pdf_url',
+            'fecha_creacion', 'fecha_expiracion',
+        ]
+
+    def get_comprobante_pdf_url(self, obj):
+        if obj.comprobante_pdf:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.comprobante_pdf.url)
+            return obj.comprobante_pdf.url
+        return None
+
+
+class CrearOrdenPrepagoSerializer(serializers.Serializer):
+    """Serializer de entrada para crear una orden de prepago."""
+    tipo_combustible_id = serializers.IntegerField()
+    monto_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    def validate_monto_total(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El monto debe ser mayor a cero.")
+        limite = getattr(settings, 'PREPAGO_MONTO_MAXIMO', 1000)
+        if value > limite:
+            raise serializers.ValidationError(
+                f"El monto no puede superar Bs. {limite} por transacción."
+            )
+        return value

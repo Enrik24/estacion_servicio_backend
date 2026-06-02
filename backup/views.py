@@ -1,30 +1,14 @@
 import subprocess
 import os
 import tempfile
+import requests
 from django.conf import settings
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from seguridad.models import Bitacora , registrar_bitacora
-
-
-def registrar_bitacora(request, accion, descripcion, estado='EXITO'):
-    try:
-        usuario_rol = 'Sin rol'
-        try:
-            usuario_rol = request.user.nombre_rol
-        except Exception:
-            pass
-        registrar_bitacora(
-            request,
-            accion=accion,
-            modulo='Backup',
-            descripcion=descripcion,
-        )   
-    except Exception:
-        pass
+from seguridad.models import Bitacora, registrar_bitacora
 
 
 @api_view(['GET'])
@@ -51,11 +35,28 @@ def descargar_backup(request):
     ], capture_output=True, text=True)
 
     if resultado.returncode != 0:
-        registrar_bitacora(request, 'CREAR', f'Error al crear backup: {resultado.stderr}', 'ERROR')
+        registrar_bitacora(request, accion='CREAR', descripcion=f'Error al crear backup: {resultado.stderr}', estado='ERROR', modulo='Backup')
         return Response({'error': resultado.stderr}, status=500)
 
+    # Subir a Supabase Storage automáticamente
+    try:
+        with open(tmp_path, 'rb') as f:
+            contenido = f.read()
+        url = f"{settings.SUPABASE_URL}/storage/v1/object/backups/{nombre}"
+        headers = {
+            'Authorization': f'Bearer {settings.SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/octet-stream',
+        }
+        response = requests.post(url, headers=headers, data=contenido)
+        if response.status_code in [200, 201]:
+            print(f'✅ Backup subido a Supabase: {nombre}')
+        else:
+            print(f'⚠️ No se pudo subir a Supabase: {response.text}')
+    except Exception as e:
+        print(f'⚠️ Error subiendo a Supabase: {e}')
+
     tamanio = os.path.getsize(tmp_path)
-    registrar_bitacora(request, 'CREAR', f'Backup descargado: {nombre} ({tamanio} bytes)')
+    registrar_bitacora(request, accion='CREAR', descripcion=f'Backup generado y subido a Supabase: {nombre} ({tamanio} bytes)', modulo='Backup')
 
     response = FileResponse(
         open(tmp_path, 'rb'),
@@ -63,6 +64,76 @@ def descargar_backup(request):
     )
     response['Content-Disposition'] = f'attachment; filename="{nombre}"'
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def listar_backups(request):
+    """Lista los backups disponibles en Supabase Storage."""
+    if not request.user.is_superuser and not request.user.tiene_permiso('backup.crear'):
+        return Response({'error': 'Sin permiso'}, status=403)
+
+    url = f"{settings.SUPABASE_URL}/storage/v1/object/list/backups"
+    headers = {
+        'Authorization': f'Bearer {settings.SUPABASE_SERVICE_KEY}',
+        'Content-Type': 'application/json',
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json={
+            'limit': 50,
+            'offset': 0,
+            'prefix': '',
+            'sortBy': {'column': 'created_at', 'order': 'desc'}
+        })
+        print(f'Status: {response.status_code}')
+        print(f'Response: {response.text}')
+        if response.status_code != 200:
+            return Response({'error': 'Error al listar backups'}, status=500)
+
+        archivos = response.json()
+        data = [{
+            'nombre': a['name'],
+            'tamanio': a.get('metadata', {}).get('size', 0),
+            'fecha': a.get('created_at', ''),
+        } for a in archivos if a.get('name')]
+
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def descargar_backup_supabase(request, nombre):
+    """Descarga un backup específico desde Supabase Storage."""
+    if not request.user.is_superuser and not request.user.tiene_permiso('backup.crear'):
+        return Response({'error': 'Sin permiso'}, status=403)
+
+    url = f"{settings.SUPABASE_URL}/storage/v1/object/backups/{nombre}"
+    headers = {
+        'Authorization': f'Bearer {settings.SUPABASE_SERVICE_KEY}',
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return Response({'error': 'Backup no encontrado'}, status=404)
+
+        tmp_path = os.path.join(tempfile.gettempdir(), nombre)
+        with open(tmp_path, 'wb') as f:
+            f.write(response.content)
+
+        registrar_bitacora(request, accion='CONSULTAR', descripcion=f'Descargó backup: {nombre}', modulo='Backup')
+
+        return FileResponse(
+            open(tmp_path, 'rb'),
+            content_type='application/octet-stream',
+            as_attachment=True,
+            filename=nombre
+        )
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -97,18 +168,20 @@ def restaurar_backup(request):
     os.remove(tmp_path)
 
     errores_fatales = [
-    line for line in resultado.stderr.split('\n')
-    if 'error' in line.lower() 
-    and 'event trigger' not in line.lower()
-    and 'already exists' not in line.lower()
-    and 'duplicate key' not in line.lower()
-    and 'multiple primary keys' not in line.lower()
-    and line.strip() != ''
-]
-
+        line for line in resultado.stderr.split('\n')
+        if 'error' in line.lower()
+        and 'event trigger' not in line.lower()
+        and 'already exists' not in line.lower()
+        and 'duplicate key' not in line.lower()
+        and 'multiple primary keys' not in line.lower()
+        and 'ya existe' not in line.lower()
+        and 'llave duplicada' not in line.lower()
+        and 'no se permiten' not in line.lower()
+        and line.strip() != ''
+    ]   
     if errores_fatales:
-        registrar_bitacora(request, 'EDITAR', f'Error al restaurar: {errores_fatales[0]}', 'ERROR')
+        registrar_bitacora(request, accion='EDITAR', descripcion=f'Error al restaurar: {errores_fatales[0]}', estado='ERROR', modulo='Backup')
         return Response({'error': errores_fatales[0]}, status=500)
 
-    registrar_bitacora(request, 'EDITAR', f'Base de datos restaurada desde: {archivo.name}')
+    registrar_bitacora(request, accion='EDITAR', descripcion=f'Base de datos restaurada desde: {archivo.name}', modulo='Backup')
     return Response({'mensaje': f'Base de datos restaurada correctamente desde {archivo.name}'})

@@ -9,7 +9,9 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ConsolidacionCajaViewSet, SucursalViewSet, IslaViewSet, LadoViewSet,
     TipoCombustibleViewSet, TurnoViewSet, ClienteViewSet, VentaViewSet, VehiculoViewSet,
-    PreciosCombustibleView, ComprasViewSet
+    PreciosCombustibleView, ComprasViewSet, CrearPrepagoAPIView, StripeWebhookAPIView, MisOrdenesPrepagoAPIView,
+    DescargarComprobantePDFAPIView, ValidarPrepagoAPIView, DespacharPrepagoAPIView,
+    OrdenesPrepagoOperadorAPIView, CompletarPerfilClienteAPIView, SucursalesPublicasAPIView
 )
 
 router = DefaultRouter()
@@ -35,6 +37,17 @@ router.register(r'consolidacion', ConsolidacionCajaViewSet, basename='consolidac
 
 urlpatterns = [
 
+    # Público — landing page
+    path('sucursales-publicas/', SucursalesPublicasAPIView.as_view(), name='sucursales-publicas'),
+
+    path('perfil/completar/', CompletarPerfilClienteAPIView.as_view(), name='perfil-completar'),
     path('precios-combustible/', PreciosCombustibleView.as_view()),
+    path('prepago/crear/', CrearPrepagoAPIView.as_view(), name='prepago-crear'),
+    path('prepago/webhook/', StripeWebhookAPIView.as_view(), name='prepago-webhook'),
+    path('prepago/mis-ordenes/', MisOrdenesPrepagoAPIView.as_view(), name='prepago-mis-ordenes'),
+    path('prepago/<int:orden_id>/pdf/', DescargarComprobantePDFAPIView.as_view(), name='prepago-pdf'),
+    path('prepago/validar/<str:numero_orden>/', ValidarPrepagoAPIView.as_view(), name='prepago-validar'),
+    path('prepago/despachar/<str:numero_orden>/', DespacharPrepagoAPIView.as_view(), name='prepago-despachar'),
+    path('prepago/ordenes-pendientes/', OrdenesPrepagoOperadorAPIView.as_view(), name='prepago-ordenes-pendientes'),
     path('', include(router.urls)),
 ]

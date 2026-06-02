@@ -17,7 +17,7 @@ from datetime import datetime
 
 class LPRTestAutomation:
     """Clase para automatizar las pruebas del endpoint LPR"""
-    
+    #en produccion colocar url del backend en la nube, por ejemplo: "https://api.estacion.com"
     def __init__(self, base_url="http://localhost:8000"):
         """
         Inicializa la configuración de prueba

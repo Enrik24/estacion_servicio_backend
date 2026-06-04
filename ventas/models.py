@@ -14,22 +14,14 @@ class TipoCombustible(models.Model):
     ]
 
     id = models.BigAutoField(primary_key=True)
-    tipo = models.CharField(max_length=30, choices=TIPOS)
+    tipo = models.CharField(max_length=30, choices=TIPOS, unique=True)
     precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
     activo = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
-    empresa = models.ForeignKey(
-        'usuarios.Empresa',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='tipos_combustible'
-    )
     class Meta:
         db_table = 'tipos_combustible'
         verbose_name = 'Tipo de Combustible'
         verbose_name_plural = 'Tipos de Combustible'
-        unique_together = ['tipo', 'empresa']
 
     def __str__(self):
         return f"{self.get_tipo_display()} - Bs. {self.precio_litro}/Lt"
@@ -56,7 +48,7 @@ class Sucursal(models.Model):
     empresa = models.ForeignKey(
         'usuarios.Empresa',
         on_delete=models.CASCADE,
-   
+        related_name='sucursales',
     )
     tipos_combustible = models.ManyToManyField(
         'TipoCombustible',

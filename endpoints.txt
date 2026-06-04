@@ -1,0 +1,247 @@
+================================================================================
+                            ENDPOINTS DE LA API
+               Sistema de Estación de Servicio — Backend Django
+================================================================================
+
+Base URL: http://localhost:8000
+Prefijo general: /api/
+
+================================================================================
+AUTENTICACIÓN JWT (backend/urls.py)
+================================================================================
+
+POST   /api/token/refresh/                Refrescar token JWT
+POST   /api/token/verify/                 Verificar token JWT
+
+================================================================================
+USUARIOS / AUTH (usuarios/urls.py)
+================================================================================
+
+--- Autenticación ---
+POST   /api/auth/login/                   Iniciar sesión (email + password)
+POST   /api/auth/logout/                  Cerrar sesión (invalida refresh token)
+POST   /api/auth/register/                Auto-registro (crea cuenta cliente)
+POST   /api/auth/verify-account/<token>/  Verificar email con token UUID
+POST   /api/auth/resend-verification/     Reenviar email de verificación
+POST   /api/auth/request-reset/           Solicitar recuperación de contraseña
+POST   /api/auth/reset-password/<token>/  Restablecer contraseña con token UUID
+
+--- Usuarios (CRUD) ---
+GET    /api/usuarios/                     Listar usuarios
+POST   /api/usuarios/                     Crear usuario
+GET    /api/usuarios/<id>/                Obtener usuario
+PUT    /api/usuarios/<id>/                Actualizar usuario
+PATCH  /api/usuarios/<id>/                Actualizar parcialmente
+DELETE /api/usuarios/<id>/                Eliminar (soft-delete is_active=False)
+GET    /api/usuarios/me/                  Obtener perfil del usuario autenticado
+PATCH  /api/usuarios/me/                  Actualizar perfil del usuario autenticado
+POST   /api/usuarios/cambiar_password/    Cambiar contraseña (requiere actual)
+POST   /api/usuarios/<id>/asignar-roles/  Asignar roles a un usuario
+
+--- Clientes (Usuarios con rol Cliente) ---
+GET    /api/clientes/                     Listar clientes
+POST   /api/clientes/                     Crear cliente
+GET    /api/clientes/<id>/                Obtener cliente
+PUT    /api/clientes/<id>/                Actualizar cliente
+PATCH  /api/clientes/<id>/                Actualizar parcialmente
+DELETE /api/clientes/<id>/                Eliminar cliente (soft-delete)
+
+--- Roles ---
+GET    /api/roles/                        Listar roles
+POST   /api/roles/                        Crear rol
+GET    /api/roles/<id>/                   Obtener rol
+PUT    /api/roles/<id>/                   Actualizar rol
+PATCH  /api/roles/<id>/                   Actualizar parcialmente
+DELETE /api/roles/<id>/                   Eliminar rol
+GET    /api/roles/<id>/permisos/          Obtener permisos de un rol
+
+--- Permisos ---
+GET    /api/permisos/                     Listar permisos
+POST   /api/permisos/                     Crear permiso
+GET    /api/permisos/<id>/                Obtener permiso
+PUT    /api/permisos/<id>/                Actualizar permiso
+PATCH  /api/permisos/<id>/                Actualizar parcialmente
+DELETE /api/permisos/<id>/                Eliminar permiso
+
+--- Límites de Consumo ---
+GET    /api/limites-consumo/              Listar límites de consumo
+POST   /api/limites-consumo/              Crear límite de consumo
+GET    /api/limites-consumo/<id>/         Obtener límite
+PUT    /api/limites-consumo/<id>/         Actualizar límite
+PATCH  /api/limites-consumo/<id>/         Actualizar parcialmente
+DELETE /api/limites-consumo/<id>/         Eliminar límite
+POST   /api/limites-consumo/validar_consumo/  Validar consumo contra límites
+
+--- Empresas ---
+GET    /api/empresas/                     Listar empresas
+POST   /api/empresas/                     Crear empresa (con admin + combustibles)
+GET    /api/empresas/<id>/                Obtener empresa
+PUT    /api/empresas/<id>/                Actualizar empresa
+PATCH  /api/empresas/<id>/                Actualizar parcialmente
+DELETE /api/empresas/<id>/                Eliminar empresa
+PATCH  /api/empresas/<id>/cambiar_estado/ Cambiar estado (ACTIVA/INACTIVA/SUSPENDIDA)
+
+--- Predicciones (IA) ---
+POST   /api/predicciones-consumo/         Generar predicción de consumo (Groq AI)
+
+================================================================================
+SEGURIDAD (seguridad/urls.py)
+================================================================================
+
+GET    /api/seguridad/bitacora/           Listar bitácora (auditoría)
+GET    /api/seguridad/bitacora/<id>/      Obtener entrada de bitácora
+       (Filtros: fecha_desde, fecha_hasta, usuario_nombre, usuario_email)
+
+================================================================================
+VENTAS (ventas/urls.py)
+================================================================================
+
+--- Islas (Surtidores) ---
+GET    /api/islas/                        Listar islas
+POST   /api/islas/                        Crear isla
+GET    /api/islas/<id>/                   Obtener isla
+PUT    /api/islas/<id>/                   Actualizar isla
+PATCH  /api/islas/<id>/                   Actualizar parcialmente
+DELETE /api/islas/<id>/                   Eliminar isla
+
+--- Lados de Islas ---
+GET    /api/lados/                        Listar lados (?isla= para filtrar)
+POST   /api/lados/                        Crear lado
+GET    /api/lados/<id>/                   Obtener lado
+PUT    /api/lados/<id>/                   Actualizar lado
+PATCH  /api/lados/<id>/                   Actualizar parcialmente
+DELETE /api/lados/<id>/                   Eliminar lado
+
+--- Tipos de Combustible ---
+GET    /api/tipos-combustible/            Listar tipos de combustible
+POST   /api/tipos-combustible/            Crear tipo de combustible
+GET    /api/tipos-combustible/<id>/       Obtener tipo
+PUT    /api/tipos-combustible/<id>/       Actualizar tipo/precio
+PATCH  /api/tipos-combustible/<id>/       Actualizar parcialmente
+DELETE /api/tipos-combustible/<id>/       Eliminar tipo
+
+--- Sucursales ---
+GET    /api/sucursales/                   Listar sucursales
+POST   /api/sucursales/                   Crear sucursal (auto-crea islas y lados)
+GET    /api/sucursales/<id>/              Obtener sucursal
+PUT    /api/sucursales/<id>/              Actualizar sucursal
+PATCH  /api/sucursales/<id>/              Actualizar parcialmente
+DELETE /api/sucursales/<id>/              Eliminar sucursal
+
+--- Turnos ---
+GET    /api/turnos/                       Listar turnos
+POST   /api/turnos/                       Abrir turno
+GET    /api/turnos/<id>/                  Obtener turno
+PUT    /api/turnos/<id>/                  Actualizar turno
+PATCH  /api/turnos/<id>/                  Actualizar parcialmente
+DELETE /api/turnos/<id>/                  Eliminar turno
+POST   /api/turnos/<id>/cerrar/           Cerrar turno (monto_final, observaciones)
+GET    /api/turnos/mi_turno/              Obtener turno abierto del usuario actual
+GET    /api/turnos/resumen/               Resumen de turnos (?fecha, ?horario)
+
+--- Clientes (Ventas) ---
+GET    /api/clientes-ventas/              Listar clientes de ventas
+POST   /api/clientes-ventas/              Crear cliente (opcional: credenciales auto)
+GET    /api/clientes-ventas/<id>/         Obtener cliente
+PUT    /api/clientes-ventas/<id>/         Actualizar cliente
+PATCH  /api/clientes-ventas/<id>/         Actualizar parcialmente
+DELETE /api/clientes-ventas/<id>/         Eliminar cliente
+GET    /api/clientes-ventas/por_sucursal/ Clientes filtrados por sucursal
+
+--- Ventas ---
+GET    /api/ventas/                       Listar ventas
+POST   /api/ventas/                       Registrar venta (litros o "lleno")
+GET    /api/ventas/<id>/                  Obtener venta
+PUT    /api/ventas/<id>/                  Actualizar venta
+PATCH  /api/ventas/<id>/                  Actualizar parcialmente
+DELETE /api/ventas/<id>/                  Eliminar venta
+POST   /api/ventas/<id>/anular/           Anular venta (revierte crédito)
+GET    /api/ventas/mi_turno_ventas/       Ventas del turno abierto del usuario
+GET    /api/ventas/<id>/ticket/           Obtener ticket/comprobante de venta
+
+--- Vehículos ---
+GET    /api/vehiculos/                    Listar vehículos
+GET    /api/vehiculos/<id>/               Obtener vehículo
+GET    /api/vehiculos/buscar_placa/       Buscar vehículo por placa (?placa=)
+POST   /api/vehiculos/registrar_en_empresa/  Vincular cliente a empresa
+POST   /api/vehiculos/registrar_cliente_vehiculo/  Registrar cliente + vehículo
+
+--- Compras (Combustible) ---
+GET    /api/compras/                      Listar compras del usuario
+POST   /api/compras/                      Registrar compra de combustible
+
+--- Consolidación de Caja ---
+GET    /api/consolidacion/                Listar turnos pendientes de consolidar
+POST   /api/consolidacion/<id>/consolidar/  Consolidar turno
+
+--- Endpoints Adicionales ---
+GET    /api/sucursales-publicas/          Landing page — sucursales + disponibilidad (público)
+PUT    /api/perfil/completar/             Completar perfil de cliente (1ra vez)
+GET    /api/precios-combustible/          Precios de combustible activos (público)
+
+--- Prepago (Stripe) ---
+POST   /api/prepago/crear/               Crear orden de prepago (Stripe PaymentIntent)
+POST   /api/prepago/webhook/             Webhook de Stripe (pagos)
+GET    /api/prepago/mis-ordenes/          Historial de órdenes del cliente
+GET    /api/prepago/<orden_id>/pdf/       Descargar comprobante PDF
+GET    /api/prepago/validar/<numero_orden>/  Validar orden (operador POS)
+POST   /api/prepago/despachar/<numero_orden>/  Despachar orden (operador POS)
+GET    /api/prepago/ordenes-pendientes/   Listar órdenes pendientes (operador POS)
+
+================================================================================
+INVENTARIO (inventario/urls.py)
+================================================================================
+
+--- Tanques ---
+GET    /api/inventario/tanques/           Listar tanques
+POST   /api/inventario/tanques/           Crear tanque
+GET    /api/inventario/tanques/<id>/      Obtener tanque
+PUT    /api/inventario/tanques/<id>/      Actualizar tanque
+PATCH  /api/inventario/tanques/<id>/      Actualizar parcialmente
+DELETE /api/inventario/tanques/<id>/      Eliminar tanque
+POST   /api/inventario/tanques/<id>/registrar_descarga/  Registrar descarga
+PATCH  /api/inventario/tanques/<id>/ampliar_capacidad/   Ampliar capacidad
+
+--- Descargas (solo lectura) ---
+GET    /api/inventario/descargas/         Listar descargas
+GET    /api/inventario/descargas/<id>/    Obtener descarga
+
+================================================================================
+REPORTES (reportes/urls.py)
+================================================================================
+
+GET    /api/reportes/ventas/              Reporte de ventas (filtros varios)
+GET    /api/reportes/turnos/              Reporte de turnos
+GET    /api/reportes/clientes/            Reporte de clientes
+GET    /api/reportes/sucursales/          Reporte de sucursales
+GET    /api/reportes/islas/               Reporte de islas y lados
+POST   /api/reportes/interpretar/         Interpretar comando de voz (Groq IA)
+POST   /api/reportes/email/               Enviar reporte por email (Excel/PDF/HTML)
+
+================================================================================
+MONITOREO (monitoreo/urls.py)
+================================================================================
+
+GET    /api/monitoreo/surtidores/         Estado actual de todos los surtidores
+GET    /api/monitoreo/surtidores/<int>/   Obtener estado de surtidor (no usado)
+POST   /api/monitoreo/surtidores/cambiar_estado/  Cambiar estado (ACTIVO/INACTIVO/FALLA)
+GET    /api/monitoreo/surtidores/historial/      Historial de cambios de estado
+
+================================================================================
+BACKUP (backup/urls.py)
+================================================================================
+
+GET    /api/backup/descargar/             Generar y descargar backup de BD
+GET    /api/backup/listar/                Listar backups en Supabase Storage
+GET    /api/backup/descargar-supabase/<nombre>/  Descargar backup específico
+POST   /api/backup/restaurar/             Restaurar BD desde archivo .sql
+
+================================================================================
+ADMIN DJANGO (backend/urls.py)
+================================================================================
+
+GET    /admin/                            Panel de administración de Django
+
+================================================================================
+                            FIN DEL DOCUMENTO
+================================================================================

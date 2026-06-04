@@ -436,16 +436,20 @@ class EmpresaViewSet(viewsets.ModelViewSet):
                 longitud=request.data.get('longitud') or None,
             )
 
-            # Crear tipos de combustible
-            tipos_combustible = request.data.get('tipos_combustible', {})
-            from ventas.models import TipoCombustible
-            for tipo, precio in tipos_combustible.items():
-                TipoCombustible.objects.create(
-                    tipo=tipo,
-                    precio_litro=precio,
-                    empresa=empresa,
-                    activo=True
-                )
+            # Crear sucursal principal y asociar tipos de combustible globales
+            from ventas.models import Sucursal, TipoCombustible
+            tipos_seleccionados = request.data.get('tipos_combustible', {})
+            sucursal = Sucursal.objects.create(
+                nombre=data['nombre'],
+                empresa=empresa,
+                direccion=data.get('direccion') or '',
+                telefono=data.get('telefono') or None,
+                nit=data.get('nit') or None,
+                latitud=request.data.get('latitud') or None,
+                longitud=request.data.get('longitud') or None,
+            )
+            tipos_globales = TipoCombustible.objects.filter(tipo__in=tipos_seleccionados.keys())
+            sucursal.tipos_combustible.set(list(tipos_globales))
 
             rol_admin, _ = Rol.objects.get_or_create(nombre='Administrador')
             admin = Usuario.objects.create(

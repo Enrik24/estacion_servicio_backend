@@ -7,8 +7,6 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    initial = True
-
     dependencies = [
         ('seguridad', '0001_initial'),
         ('usuarios', '0001_initial'),

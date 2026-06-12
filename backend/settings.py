@@ -31,7 +31,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-default-key-for-dev')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = ['*']
 
 
 
@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'inventario',
     'django_crontab',
     'anymail',
+
 ]
 
 MIDDLEWARE = [
@@ -200,7 +201,6 @@ SIMPLE_JWT = {
 }
 DATABASE_URL = config('DATABASE_URL', default='')
 
-# CORS
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in config('CORS_ALLOWED_ORIGINS', default='').split(',')
@@ -209,7 +209,10 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
 
-#GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
+# Desarrollo local Flutter web
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+
 
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
 

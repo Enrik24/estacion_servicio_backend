@@ -207,6 +207,10 @@ class Vehiculo(models.Model):
         verbose_name = 'Vehículo'
         verbose_name_plural = 'Vehículos'
 
+    def save(self, *args, **kwargs):
+        self.placa = self.placa.upper() if self.placa else self.placa
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.placa} - {self.cliente.nombre}"
 
@@ -249,22 +253,6 @@ class Venta(models.Model):
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
     
-class EmpresaCliente(models.Model):
-    empresa = models.ForeignKey(
-        'usuarios.Empresa',
-        on_delete=models.CASCADE,
-        related_name='empresa_clientes'
-    )
-    cliente = models.ForeignKey(
-        Cliente,
-        on_delete=models.CASCADE,
-        related_name='empresa_clientes'
-    )
-    activo = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-
-
 class CompraCombustible(models.Model):
     id = models.BigAutoField(primary_key=True)
     tipo_combustible = models.ForeignKey(TipoCombustible, on_delete=models.PROTECT, related_name='compras')
@@ -369,4 +357,4 @@ class OrdenPrepago(models.Model):
         else:
             siguiente = 1
         return f"{prefijo}{siguiente:05d}"
-
+

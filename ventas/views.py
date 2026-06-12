@@ -14,8 +14,11 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction, IntegrityError
+from django.db.models import Value
+from django.db.models.functions import Replace
 import uuid
 import re
+import requests
 from usuarios import models
 from django.db.models import Max
 from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo, CompraCombustible, EmpresaCliente
@@ -34,6 +37,10 @@ from seguridad.models import Bitacora ,registrar_bitacora
 from usuarios.models import Usuario, Rol
 
 from .client_linking import resolve_cliente_for_sale, resolve_cliente_for_usuario
+try:
+    from backend.settings import TOKEN_PLATERECOGNIZER
+except ImportError:
+    TOKEN_PLATERECOGNIZER = ''
 
 
 class PreciosCombustibleView(APIView):
@@ -188,7 +195,7 @@ class TipoCombustibleViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return TipoCombustible.objects.filter(activo=True)
         if user.empresa:
-            return TipoCombustible.objects.filter(activo=True, empresa=user.empresa)
+            return TipoCombustible.objects.filter(activo=True, sucursales__empresa=user.empresa).distinct()
         return TipoCombustible.objects.none()
     def perform_update(self, serializer):
         tipo = serializer.save()
@@ -772,6 +779,134 @@ class VehiculoViewSet(GenericViewSet):
         serializer = TicketVentaSerializer(venta)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def verificar_placa_lpr2(self, request):
+        placa_buscada = request.data.get('placa', '').upper().strip()
+        placa_limpia = re.sub(r'[\s\-.]', '', placa_buscada)
+
+        if not placa_limpia:
+            return Response({
+                'encontrado': False,
+                'error': 'No se proporcionó una placa'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(
+                    Replace(
+                        Replace('placa', Value('-'), Value('')),
+                        Value(' '), Value('')
+                    ),
+                    Value('.'), Value('')
+                )
+            ).select_related('cliente').get(
+                placa_normalizada=placa_limpia,
+                activo=True
+            )
+
+            cliente = vehiculo.cliente
+
+            if not cliente.activo:
+                return Response({
+                    "encontrado": False,
+                    "mensaje": "Cliente inactivo en el sistema."
+                }, status=status.HTTP_200_OK)
+
+            response_data = {
+                "encontrado": True,
+                "vehiculo": {
+                    "id": vehiculo.id,
+                    "placa": vehiculo.placa,
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo,
+                    "color": vehiculo.color
+                },
+                "cliente": {
+                    "id": cliente.id,
+                    "nombre": cliente.nombre,
+                    "nit": cliente.nit or 'S/N',
+                    "telefono": cliente.telefono,
+                    "saldo_credito": float(cliente.saldo_credito),
+                    "limite_credito": float(cliente.limite_credito)
+                }
+            }
+
+            registrado_en_empresa = False
+            if request.user.is_authenticated and request.user.empresa:
+                registrado_en_empresa = EmpresaCliente.objects.filter(
+                    empresa=request.user.empresa,
+                    cliente=cliente
+                ).exists()
+                response_data["registrado_en_empresa"] = registrado_en_empresa
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "mensaje": "Vehículo foráneo. No registrado en el sistema."
+            }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def procesar_imagen_lpr(self, request):
+        if 'upload' not in request.FILES:
+            return Response({'error': 'No se envió ninguna imagen (archivo "upload")'}, status=status.HTTP_400_BAD_REQUEST)
+
+        imagen = request.FILES['upload']
+
+        if not imagen.content_type.startswith('image/'):
+            return Response({'error': 'El archivo enviado no es una imagen válida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            response = requests.post(
+                'https://api.platerecognizer.com/v1/plate-reader/',
+                data=dict(regions='bo'),
+                files=dict(upload=imagen.read()),
+                headers={'Authorization': f'Token {TOKEN_PLATERECOGNIZER}'},
+                timeout=5
+            )
+
+            res_json = response.json()
+
+            if not res_json.get('results'):
+                return Response({
+                    'encontrado': False,
+                    'mensaje': 'La IA no detectó ninguna placa clara en la imagen.'
+                }, status=status.HTTP_200_OK)
+
+            placa_detectada = res_json['results'][0]['plate'].upper()
+            placa_limpia = placa_detectada.replace('-', '').replace(' ', '')
+
+            vehiculo = Vehiculo.objects.annotate(
+                placa_normalizada=Replace(Replace('placa', Value('-'), Value('')), Value(' '), Value(''))
+            ).select_related('cliente').get(placa_normalizada=placa_limpia)
+
+            cliente = vehiculo.cliente
+
+            return Response({
+                "encontrado": True,
+                "placa_leida_ia": placa_detectada,
+                "vehiculo": {
+                    "placa": vehiculo.placa,
+                    "marca": vehiculo.marca,
+                    "modelo": vehiculo.modelo
+                },
+                "cliente": {
+                    "nombre": cliente.nombre,
+                    "nit": getattr(cliente, 'nit', 'S/N')
+                }
+            }, status=status.HTTP_200_OK)
+
+        except requests.exceptions.RequestException as e:
+            return Response({'error': f'Error conectando con PlateRecognizer: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except Vehiculo.DoesNotExist:
+            return Response({
+                "encontrado": False,
+                "placa_leida_ia": placa_detectada,
+                "mensaje": f"Placa {placa_detectada} detectada, pero es un Vehículo foráneo."
+            }, status=status.HTTP_200_OK)
+
 class SucursalViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar sucursales con creación automática de islas y lados."""
     queryset = Sucursal.objects.all()
@@ -1277,32 +1412,35 @@ class DescargarComprobantePDFAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, orden_id):
-        # Resolver el cliente del usuario autenticado para verificar propiedad
         cliente = resolve_cliente_for_usuario(request.user)
         if not cliente:
             raise Http404
 
-        # Buscar la orden verificando que pertenece a este cliente y tiene
-        # un estado que garantiza que el pago fue procesado
         try:
             orden = OrdenPrepago.objects.get(id=orden_id, cliente=cliente, estado__in=['PAGADO', 'DESPACHADO', 'VENCIDO'])
         except OrdenPrepago.DoesNotExist:
             raise Http404
 
-        # Si el PDF no existe en disco, intentar regenerarlo ahora
         if not orden.comprobante_pdf:
             try:
                 from utils.pdf_generator import generar_comprobante_pdf
                 generar_comprobante_pdf(orden)
+                orden.refresh_from_db()
             except Exception:
                 return Response({'error': 'No se pudo generar el comprobante.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Servir el archivo PDF como descarga al navegador/app
-        return FileResponse(
-            orden.comprobante_pdf.open('rb'),
-            as_attachment=True,
-            filename=f"comprobante_{orden.numero_orden}.pdf",
-        )
+        if not orden.comprobante_pdf:
+            return Response({'error': 'El comprobante no está disponible.'}, status=status.HTTP_404_NOT_FOUND)
+
+        import base64
+        pdf_bytes = orden.comprobante_pdf.read()
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        orden.comprobante_pdf.close()
+
+        return Response({
+            'pdf_base64': pdf_base64,
+            'filename': f"comprobante_{orden.numero_orden}.pdf",
+        })
 
 class ValidarPrepagoAPIView(APIView):
     """
@@ -1521,7 +1659,7 @@ class OrdenesPrepagoOperadorAPIView(APIView):
         # Filtrar por empresa del operador a través del tipo de combustible.
         # Un operador solo puede despachar combustibles de su empresa.
         if user.empresa:
-            qs = qs.filter(tipo_combustible__empresa=user.empresa)
+            qs = qs.filter(tipo_combustible__sucursales__empresa=user.empresa).distinct()
         elif not user.is_superuser:
             # Usuario sin empresa y sin superuser: no ve ninguna orden
             return Response([])

@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             name='EstadoSurtidor',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('estado', models.CharField(choices=[('ACTIVO', 'Activo'), ('INACTIVO', 'Inactivo'), ('FALLA', 'Falla')], default='ACTIVO', max_length=20)),
+                ('estado', models.CharField(choices=[('ACTIVO', 'Activo'), ('INACTIVO', 'Inactivo'), ('FALLA', 'Falla'), ('AUTORIZADO_REMOTO', 'Autorizado Remoto (LPR)')], default='ACTIVO', max_length=20)),
                 ('descripcion_falla', models.TextField(blank=True, null=True)),
                 ('fecha_reporte', models.DateTimeField(auto_now=True)),
                 ('fecha_resolucion', models.DateTimeField(blank=True, null=True)),

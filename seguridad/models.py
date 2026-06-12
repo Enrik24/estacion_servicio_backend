@@ -53,7 +53,6 @@ class Bitacora(models.Model):
         ordering = ['-fecha_hora']
 
     def __str__(self):
-
         return f"{self.accion} - {self.usuario_email or 'Sistema'} - {self.fecha_hora.strftime('%Y-%m-%d %H:%M')}"
 def registrar_bitacora(request, accion, descripcion, estado='EXITO', modulo='Sistema', usuario=None):
     try:

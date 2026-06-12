@@ -168,7 +168,7 @@ def reporte_turnos(request):
             'id':              turno.id,
             'operador':        turno.operador.nombre,
             'isla':            turno.isla.numero,
-            'horario':         turno.get_horario_display(),
+            'horario':         turno.get_horario_display(),  # pyright: ignore[reportAttributeAccessIssue]  # Django genera get_<campo>_display() por choices
             'horario_codigo':  turno.horario,
             'estado':          turno.estado,
             'fecha_apertura':  turno.fecha_apertura,
@@ -344,7 +344,7 @@ def reporte_islas(request):
         )
 
         lados_data = []
-        for lado in isla.lados.all():
+        for lado in isla.lados.all():  # pyright: ignore[reportAttributeAccessIssue]  # 'lados' = related_name inverso de Lado.isla
             ventas_lado = ventas_isla.filter(lado=lado)
             agg_lado = ventas_lado.aggregate(
                 total_recaudado=Coalesce(Sum('total'), Decimal('0')),
@@ -632,6 +632,7 @@ def _generar_excel(columnas, datos, tipo_reporte):
 
     wb = Workbook()
     ws = wb.active
+    assert ws is not None  # openpyxl tipa wb.active como Optional; un Workbook nuevo siempre tiene hoja activa
     ws.title = tipo_reporte.capitalize()
 
     # Estilo de cabecera
@@ -653,7 +654,7 @@ def _generar_excel(columnas, datos, tipo_reporte):
     # Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_len = max((len(str(cell.value)) if cell.value else 0) for cell in col)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)  # pyright: ignore[reportAttributeAccessIssue]  # col[0] es Cell, no MergedCell
 
     buffer = io.BytesIO()
     wb.save(buffer)

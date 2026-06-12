@@ -503,6 +503,57 @@ JSON:"""
     return Response(resultado)
 
 
+# ── Asistente Conversacional con IA ───────────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def asistente_ia(request):
+    """
+    Asistente conversacional: responde preguntas en lenguaje natural sobre
+    ventas, clientes, turnos, combustibles y predicciones de demanda,
+    consultando los datos reales de la sucursal del usuario (multi-tenant).
+
+    Body esperado:
+    {
+        "pregunta": "¿cuánto diésel vendí esta semana?",
+        "historial": [ {"rol": "usuario", "contenido": "..."}, {"rol": "asistente", "contenido": "..."} ]
+    }
+
+    Respuesta:
+    {
+        "respuesta": "Esta semana despachaste 3.120 L de diésel por Bs. 12.480,00 ...",
+        "intencion": "ventas",
+        "params": { ... },
+        "datos": { ... },
+        "sugerencias": [ "...", "..." ],
+        "modelo": "asistente_conversacional_v1"
+    }
+    """
+    from .asistente_service import responder_asistente
+
+    pregunta = (request.data.get('pregunta') or request.data.get('texto') or '').strip()
+    if not pregunta:
+        return Response({'error': 'El campo "pregunta" es requerido y no puede estar vacío.'}, status=400)
+
+    historial = request.data.get('historial') or []
+    if not isinstance(historial, list):
+        historial = []
+
+    # Multi-tenant: alcance a la sucursal del usuario autenticado
+    sucursal_id = getattr(request.user, 'sucursal_id', None)
+
+    try:
+        resultado = responder_asistente(pregunta, sucursal_id=sucursal_id, historial=historial)
+    except Exception as e:
+        return Response(
+            {'error': f'No se pudo procesar la consulta del asistente: {str(e)}'},
+            status=500,
+        )
+
+    _registrar_bitacora(request, f'Consultó al asistente IA: "{pregunta[:100]}"')
+
+    return Response(resultado)
+
+
 # ── Enviar Reporte por Email ──────────────────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, ReportesPermiso])

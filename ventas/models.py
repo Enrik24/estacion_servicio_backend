@@ -13,7 +13,7 @@ class TipoCombustible(models.Model):
     ]
 
     id = models.BigAutoField(primary_key=True)
-    tipo = models.CharField(max_length=30, choices=TIPOS)
+    tipo = models.CharField(max_length=30, choices=TIPOS,unique=True)
     precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
     activo = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -33,7 +33,6 @@ class TipoCombustible(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} - Bs. {self.precio_litro}/Lt"
-
 
 class Sucursal(models.Model):
     ESTADOS = [
@@ -65,7 +64,6 @@ class Sucursal(models.Model):
         blank=True,
         related_name='sucursales'
     )
-
     class Meta:
         db_table = 'sucursales'
         verbose_name = 'Sucursal'
@@ -74,7 +72,6 @@ class Sucursal(models.Model):
 
     def __str__(self):
         return self.nombre
-
 
 class Isla(models.Model):
     ESTADOS = [
@@ -96,16 +93,18 @@ class Isla(models.Model):
         null=True,
         blank=True
     )
-
     class Meta:
         db_table = 'islas'
         verbose_name = 'Isla'
         verbose_name_plural = 'Islas'
         ordering = ['numero']
-        unique_together = ['sucursal', 'numero']
+
+        unique_together = ['sucursal', 'numero']  
+
 
     def __str__(self):
-        return f"Isla {self.numero}"
+        suc_name = self.sucursal.nombre if self.sucursal else "S/N"
+        return f"Isla {self.numero} - {suc_name}"
 
 
 class Lado(models.Model):
@@ -128,7 +127,6 @@ class Lado(models.Model):
 
     def __str__(self):
         return f"Isla {self.isla.numero} - Lado {self.lado}"
-
 
 class Turno(models.Model):
     ESTADOS = [
@@ -169,12 +167,19 @@ class Turno(models.Model):
     def __str__(self):
         return f"Turno {self.id} - {self.operador.nombre} - Isla {self.isla.numero}"
 
-
 class Cliente(models.Model):
     id = models.BigAutoField(primary_key=True)
     nombre = models.CharField(max_length=150)
     nit = models.CharField(max_length=20, unique=True, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
+
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cliente_ventas',
+    )
     telefono = models.CharField(max_length=20, null=True, blank=True)
     limite_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     saldo_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -219,9 +224,12 @@ class Vehiculo(models.Model):
         verbose_name = 'Vehículo'
         verbose_name_plural = 'Vehículos'
 
+    def save(self, *args, **kwargs):
+        self.placa = self.placa.upper() if self.placa else self.placa
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.placa} - {self.cliente.nombre}"
-
 
 class Venta(models.Model):
     METODOS_PAGO = [
@@ -261,6 +269,26 @@ class Venta(models.Model):
 
     def __str__(self):
         return f"Venta {self.numero_comprobante} - Bs. {self.total}"
+    
+class CompraCombustible(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    tipo_combustible = models.ForeignKey(TipoCombustible, on_delete=models.PROTECT, related_name='compras')
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    unidad = models.CharField(max_length=10)
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+    observacion = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='compras_registradas')
+
+    class Meta:
+        db_table = 'compras_combustible'
+        verbose_name = 'Compra de Combustible'
+        verbose_name_plural = 'Compras de Combustible'
+        ordering = ['-fecha_hora']
+
+    def __str__(self):
+        return f"Compra {self.id} - {self.tipo_combustible.get_tipo_display()} - Bs. {self.total}"
 
 
 class EmpresaCliente(models.Model):
@@ -323,7 +351,7 @@ class OrdenPrepago(models.Model):
     numero_orden = models.CharField(max_length=25, unique=True, editable=False, null=True, blank=True)
     cliente = models.ForeignKey('Cliente', on_delete=models.CASCADE, related_name='ordenes_prepago')
     tipo_combustible = models.ForeignKey('TipoCombustible', on_delete=models.PROTECT, related_name='ordenes_prepago')
-    precio_por_litro = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    precio_por_litro = models.DecimalField(max_digits=10, decimal_places=2, help_text='Precio congelado al momento de la compra', null=True, blank=True)
     monto_total = models.DecimalField(max_digits=12, decimal_places=2)
     litros = models.DecimalField(max_digits=10, decimal_places=2)
     estado = models.CharField(max_length=20, choices=ESTADOS, default='PENDIENTE')
@@ -352,6 +380,7 @@ class OrdenPrepago(models.Model):
 
     @staticmethod
     def generar_numero_orden():
+        """Genera un número de orden con formato PRE-AAAAMMDD-XXXXX."""
         from django.utils import timezone
         hoy = timezone.now().strftime('%Y%m%d')
         prefijo = f'PRE-{hoy}-'

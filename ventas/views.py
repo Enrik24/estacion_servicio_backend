@@ -27,8 +27,11 @@ import re
 import requests # Para llamadas a la API de PlateRecognizer
 
 from django.db import transaction, IntegrityError
+from django.db.models import Value
+from django.db.models.functions import Replace
 import uuid
 import re
+import requests
 from usuarios import models
 from django.db.models import Max
 from .models import Turno, Cliente, Venta, Isla, Lado, TipoCombustible, Sucursal, Vehiculo, CompraCombustible, EmpresaCliente
@@ -49,6 +52,10 @@ from seguridad.models import Bitacora ,registrar_bitacora
 from usuarios.models import Usuario, Rol
 
 from .client_linking import resolve_cliente_for_sale, resolve_cliente_for_usuario
+try:
+    from backend.settings import TOKEN_PLATERECOGNIZER
+except ImportError:
+    TOKEN_PLATERECOGNIZER = ''
 
 
 class PreciosCombustibleView(APIView):
@@ -203,7 +210,7 @@ class TipoCombustibleViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return TipoCombustible.objects.filter(activo=True)
         if user.empresa:
-            return TipoCombustible.objects.filter(activo=True, empresa=user.empresa)
+            return TipoCombustible.objects.filter(activo=True, sucursales__empresa=user.empresa).distinct()
         return TipoCombustible.objects.none()
     def perform_update(self, serializer):
         tipo = serializer.save()
@@ -940,14 +947,9 @@ class VehiculoViewSet(GenericViewSet):
                 "encontrado": False,
                 "mensaje": "Vehículo foráneo. No registrado en el sistema."
             }, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def procesar_imagen_lpr(self, request):
-        """
-        Recibe una imagen desde la cámara en pista, la envía a PlateRecognizer,
-        y devuelve los datos del vehículo si está registrado.
-        """
-        # 1. Verificar que la petición incluya una imagen
         if 'upload' not in request.FILES:
             return Response({'error': 'No se envió ninguna imagen (archivo "upload")'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1041,32 +1043,49 @@ class SucursalViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def perform_create(self, serializer):
+        from monitoreo.models import EstadoSurtidor
         tipos = self.request.data.get('tipos_combustible', [])
         sucursal = serializer.save(empresa=self.request.user.empresa)
         if tipos:
             sucursal.tipos_combustible.set(tipos)
-        ultimo_numero = Isla.objects.aggregate(max_num=Max('numero'))['max_num'] or 0
         for i in range(1, sucursal.cantidad_islas + 1):
             isla = Isla.objects.create(numero=i, sucursal=sucursal, estado='ACTIVO')
-            Lado.objects.create(isla=isla, lado='A', activo=True)
-            Lado.objects.create(isla=isla, lado='B', activo=True)
+            for letra in ['A', 'B']:
+                lado = Lado.objects.create(isla=isla, lado=letra, activo=True)
+                EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO')  # 👈 faltaba esto
         registrar_bitacora(self.request, accion='CREAR', descripcion=f'Creó la sucursal: {sucursal.nombre}', modulo='Sucursales')
 
     def perform_update(self, serializer):
+        from monitoreo.models import EstadoSurtidor
         tipos = self.request.data.get('tipos_combustible', [])
         sucursal = serializer.save()
         if tipos:
             sucursal.tipos_combustible.set(tipos)
-        registrar_bitacora(self.request, accion='EDITAR', descripcion=f'Editó la sucursal: {sucursal.nombre}', modulo='Sucursales')
 
-    def perform_destroy(self, instance):
-        registrar_bitacora(
-            self.request,
-            accion='ELIMINAR',
-            modulo='Sucursales',
-            descripcion=f'Eliminó la sucursal: {instance.nombre}',
-        )
-        instance.delete()
+        # Sincronizar islas reales
+        num_islas = sucursal.cantidad_islas
+        islas_actuales = sucursal.islas.count()
+
+        # Crear islas faltantes
+        for i in range(islas_actuales + 1, num_islas + 1):
+            isla = Isla.objects.create(sucursal=sucursal, numero=i, estado='ACTIVO')
+            for letra in ['A', 'B']:
+                lado = Lado.objects.create(isla=isla, lado=letra, activo=True)
+                EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO')
+
+        # Eliminar islas sobrantes
+        if num_islas < islas_actuales:
+            sucursal.islas.filter(numero__gt=num_islas).order_by('-numero').delete()
+
+        registrar_bitacora(self.request, accion='EDITAR', descripcion=f'Editó la sucursal: {sucursal.nombre}', modulo='Sucursales')
+        def perform_destroy(self, instance):
+            registrar_bitacora(
+                self.request,
+                accion='ELIMINAR',
+                modulo='Sucursales',
+                descripcion=f'Eliminó la sucursal: {instance.nombre}',
+            )
+            instance.delete()
 
 class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     """ViewSet para gestionar la consolidación de caja y reportes de cierre de turnos.
@@ -1518,32 +1537,35 @@ class DescargarComprobantePDFAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, orden_id):
-        # Resolver el cliente del usuario autenticado para verificar propiedad
         cliente = resolve_cliente_for_usuario(request.user)
         if not cliente:
             raise Http404
 
-        # Buscar la orden verificando que pertenece a este cliente y tiene
-        # un estado que garantiza que el pago fue procesado
         try:
             orden = OrdenPrepago.objects.get(id=orden_id, cliente=cliente, estado__in=['PAGADO', 'DESPACHADO', 'VENCIDO'])
         except OrdenPrepago.DoesNotExist:
             raise Http404
 
-        # Si el PDF no existe en disco, intentar regenerarlo ahora
         if not orden.comprobante_pdf:
             try:
                 from utils.pdf_generator import generar_comprobante_pdf
                 generar_comprobante_pdf(orden)
+                orden.refresh_from_db()
             except Exception:
                 return Response({'error': 'No se pudo generar el comprobante.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Servir el archivo PDF como descarga al navegador/app
-        return FileResponse(
-            orden.comprobante_pdf.open('rb'),
-            as_attachment=True,
-            filename=f"comprobante_{orden.numero_orden}.pdf",
-        )
+        if not orden.comprobante_pdf:
+            return Response({'error': 'El comprobante no está disponible.'}, status=status.HTTP_404_NOT_FOUND)
+
+        import base64
+        pdf_bytes = orden.comprobante_pdf.read()
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        orden.comprobante_pdf.close()
+
+        return Response({
+            'pdf_base64': pdf_base64,
+            'filename': f"comprobante_{orden.numero_orden}.pdf",
+        })
 
 class ValidarPrepagoAPIView(APIView):
     """
@@ -1762,7 +1784,7 @@ class OrdenesPrepagoOperadorAPIView(APIView):
         # Filtrar por empresa del operador a través del tipo de combustible.
         # Un operador solo puede despachar combustibles de su empresa.
         if user.empresa:
-            qs = qs.filter(tipo_combustible__empresa=user.empresa)
+            qs = qs.filter(tipo_combustible__sucursales__empresa=user.empresa).distinct()
         elif not user.is_superuser:
             # Usuario sin empresa y sin superuser: no ve ninguna orden
             return Response([])

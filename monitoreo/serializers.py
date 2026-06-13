@@ -7,6 +7,7 @@ class EstadoSurtidorSerializer(serializers.ModelSerializer):
     lado_letra = serializers.CharField(source='lado.lado', read_only=True)
     sucursal_nombre = serializers.CharField(source='lado.isla.sucursal.nombre', read_only=True)
     reportado_por_nombre = serializers.CharField(source='reportado_por.nombre', read_only=True)
+    cliente_activo_nombre = serializers.CharField(source='cliente_activo.nombre', read_only=True, allow_null=True)
 
     class Meta:
         model = EstadoSurtidor

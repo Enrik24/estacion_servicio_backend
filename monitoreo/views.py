@@ -275,7 +275,7 @@ class MonitoreoViewSet(viewsets.ViewSet):
 
         # Estructura JSON optimizada para el POS local del pistero
         contexto_pista = {
-            'sucursal_nombre': isla.sucursal.nombre,
+            'sucursal_nombre': isla.sucursal.nombre if isla.sucursal else None,
             'isla_id': isla.id,
             'isla_numero': isla.numero,
             'turno_id': turno_activo.id,

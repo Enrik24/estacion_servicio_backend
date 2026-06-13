@@ -7,7 +7,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('ventas', '0002_cliente_usuario'),
-        ('ventas', '0004_venta_orden_prepago_alter_ordenprepago_estado_and_more'),
     ]
 
     operations = [

@@ -693,26 +693,26 @@ def _generar_html(columnas, datos, tipo_reporte, asunto):
         for c in columnas
     )
     html = f"""<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>{asunto}</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; padding: 20px; }}
-    h1   {{ color: #1F4E79; }}
-    table {{ border-collapse: collapse; width: 100%; margin-top: 16px; }}
-    tr:nth-child(even) td {{ background: #EBF3FB; }}
-  </style>
-</head>
-<body>
-  <h1>{asunto}</h1>
-  <p>Generado el {timezone.now().strftime("%d/%m/%Y a las %H:%M")}</p>
-  <table>
-    <thead><tr>{headers_html}</tr></thead>
-    <tbody>{filas_html}</tbody>
-  </table>
-</body>
-</html>"""
+        <html lang="es">
+        <head>
+        <meta charset="UTF-8">
+        <title>{asunto}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 20px; }}
+            h1   {{ color: #1F4E79; }}
+            table {{ border-collapse: collapse; width: 100%; margin-top: 16px; }}
+            tr:nth-child(even) td {{ background: #EBF3FB; }}
+        </style>
+        </head>
+        <body>
+        <h1>{asunto}</h1>
+        <p>Generado el {timezone.now().strftime("%d/%m/%Y a las %H:%M")}</p>
+        <table>
+            <thead><tr>{headers_html}</tr></thead>
+            <tbody>{filas_html}</tbody>
+        </table>
+        </body>
+        </html>"""
 
     nombre = f'reporte_{tipo_reporte}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.html'
     return html.encode('utf-8'), nombre, 'text/html'

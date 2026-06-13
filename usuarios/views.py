@@ -16,6 +16,8 @@ from django.conf import settings
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 
+from ventas.models import Isla, Lado
+
 from .models import Usuario, Rol, Permiso, LimiteConsumo, PasswordResetToken, Empresa, EmailVerificationToken
 from .serializers import (
     UsuarioSerializer, UsuarioMeSerializer, RolSerializer,
@@ -159,18 +161,55 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             modulo='Administración y Seguridad',
             descripcion=f'Eliminó al usuario: {instance.email}',
         )
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsAuthenticated])
     def me(self, request):
+        if request.method == 'GET':
+            serializer = UsuarioMeSerializer(request.user)
+            return Response(serializer.data)
+
+        # PATCH
+        from ventas.models import Cliente, Vehiculo
+
+        serializer = UsuarioMeSerializer(request.user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+
+        # Actualizar campos del Cliente vinculado
+        campos_cliente = {}
+        if 'nit_ci' in request.data:
+            campos_cliente['nit'] = request.data['nit_ci']
+        if 'telefono' in request.data:
+            campos_cliente['telefono'] = request.data['telefono']
+
+        if campos_cliente:
+            cliente = getattr(request.user, 'cliente_ventas', None)
+            if cliente:
+                for campo, valor in campos_cliente.items():
+                    setattr(cliente, campo, valor)
+                cliente.save(update_fields=list(campos_cliente.keys()))
+
+        # Actualizar campos del Vehículo activo vinculado
+        campos_vehiculo = {}
+        for campo in ('placa', 'marca', 'modelo', 'color'):
+            if campo in request.data:
+                campos_vehiculo[campo] = request.data[campo]
+
+        if campos_vehiculo:
+            cliente = getattr(request.user, 'cliente_ventas', None)
+            if cliente:
+                vehiculo = cliente.vehiculos.filter(activo=True).first()
+                if vehiculo:
+                    for campo, valor in campos_vehiculo.items():
+                        setattr(vehiculo, campo, valor)
+                    vehiculo.save(update_fields=list(campos_vehiculo.keys()))
+                elif 'placa' in campos_vehiculo:
+                    # Si no tiene vehículo aún, lo crea
+                    Vehiculo.objects.create(cliente=cliente, **campos_vehiculo)
+
+        # Retornar los datos actualizados
         serializer = UsuarioMeSerializer(request.user)
         return Response(serializer.data)
-
-    @action(detail=False, methods=['patch'], permission_classes=[IsAuthenticated])
-    def update_me(self, request):
-        serializer = UsuarioMeSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def cambiar_password(self, request):
@@ -406,16 +445,38 @@ class EmpresaViewSet(viewsets.ModelViewSet):
                 longitud=request.data.get('longitud') or None,
             )
 
-            # Crear tipos de combustible
-            tipos_combustible = request.data.get('tipos_combustible', {})
-            from ventas.models import TipoCombustible
-            for tipo, precio in tipos_combustible.items():
-                TipoCombustible.objects.create(
-                    tipo=tipo,
-                    precio_litro=precio,
-                    empresa=empresa,
-                    activo=True
+            # Crear sucursal principal y asociar tipos de combustible globales
+            from ventas.models import Sucursal, TipoCombustible
+            tipos_seleccionados = request.data.get('tipos_combustible', {})
+            sucursal = Sucursal.objects.create(
+                nombre=data['nombre'],
+                empresa=empresa,
+                direccion=data.get('direccion') or '',
+                telefono=data.get('telefono') or None,
+                nit=data.get('nit') or None,
+                latitud=request.data.get('latitud') or None,
+                longitud=request.data.get('longitud') or None,
+            )
+            
+            tipos_globales = TipoCombustible.objects.filter(tipo__in=tipos_seleccionados.keys())
+            sucursal.tipos_combustible.set(list(tipos_globales))
+            # Crear islas con sus lados y estados
+            from monitoreo.models import EstadoSurtidor
+            num_islas = int(request.data.get('num_islas', 0))
+            for i in range(1, num_islas + 1):
+                isla = Isla.objects.create(
+                    sucursal=sucursal,
+                    numero=i,
                 )
+                for letra in ['A', 'B']:
+                    lado = Lado.objects.create(
+                        isla=isla,
+                        lado=letra,
+                    )
+                    EstadoSurtidor.objects.create(
+                        lado=lado,
+                        estado='ACTIVO',
+                    )
 
             rol_admin, _ = Rol.objects.get_or_create(nombre='Administrador')
             admin = Usuario.objects.create(
@@ -484,6 +545,36 @@ class EmpresaViewSet(viewsets.ModelViewSet):
                     nuevo_admin.set_password(nuevo_password)
                     nuevo_admin.save()
                 nuevo_admin.roles.set([rol_admin])
+
+        # Sincronizar islas reales si se envía num_islas
+        num_islas = request.data.get('num_islas')
+        if num_islas is not None:
+            from django.db import transaction
+            from ventas.models import Isla, Lado
+            from monitoreo.models import EstadoSurtidor
+
+            num_islas = int(num_islas)
+            sucursal = empresa.sucursales.first()
+
+            if sucursal:
+                sucursal.cantidad_islas = num_islas
+                sucursal.save()
+
+                with transaction.atomic():
+                    islas_actuales = sucursal.islas.count()
+
+                    # Crear islas faltantes
+                    for i in range(islas_actuales + 1, num_islas + 1):
+                        isla = Isla.objects.create(sucursal=sucursal, numero=i)
+                        for letra in ['A', 'B']:
+                            lado = Lado.objects.create(isla=isla, lado=letra)
+                            EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO')
+
+                    # Eliminar islas sobrantes
+                    if num_islas < islas_actuales:
+                        sucursal.islas.filter(
+                            numero__gt=num_islas
+                        ).order_by('-numero').delete()
 
         return Response(EmpresaSerializer(empresa).data)
     # LOGIN/LOGOUT

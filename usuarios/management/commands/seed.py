@@ -76,13 +76,11 @@ class Command(BaseCommand):
             'sucursales.ver', 'sucursales.editar', 'reportes.ver',
             'limites_consumo.ver', 'limites_consumo.crear', 'limites_consumo.editar',
         ]]
-
         permisos_operador = [permisos_creados.get(c) for c in [
             'turnos.ver', 'turnos.abrir', 'turnos.cerrar',
             'ventas.ver', 'ventas.registrar', 'ventas.anular',
             'surtidores.ver', 'clientes.ver', 'clientes.crear',
         ]]
-
         permisos_auditor = [permisos_creados.get(c) for c in [
             'bitacora.ver', 'ventas.ver', 'usuarios.ver',
             'turnos.ver', 'clientes.ver', 'sucursales.ver',

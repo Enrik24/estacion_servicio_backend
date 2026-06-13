@@ -173,6 +173,9 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
         return self.roles.filter(permisos__codigo=codigo_permiso).exists()
 
 
+    
+
+
 class LimiteConsumo(models.Model):
     TIPOS = [
         ('DIARIO', 'Diario'),

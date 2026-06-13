@@ -8,6 +8,7 @@ class EstadoSurtidor(models.Model):
         ('ACTIVO', 'Activo'),
         ('INACTIVO', 'Inactivo'),
         ('FALLA', 'Falla'),
+        ('AUTORIZADO_REMOTO', 'Autorizado Remoto (LPR)')
     ]
 
     lado = models.OneToOneField(
@@ -26,6 +27,49 @@ class EstadoSurtidor(models.Model):
     )
     fecha_reporte = models.DateTimeField(auto_now=True)
     fecha_resolucion = models.DateTimeField(null=True, blank=True)
+
+
+    # =========================================================================
+    # NUEVOS CAMPOS PARA INTEGRACIÓN IoT / LPR / CU 14
+    # =========================================================================
+    placa_activa = models.CharField(
+        max_length=15, 
+        blank=True, 
+        null=True, 
+        help_text="Placa leída por la cámara LPR que disparó el CU 14"
+    )
+    monto_autorizado = models.DecimalField(
+        max_length=10,
+        max_digits=10, 
+        decimal_places=2, 
+        default=0.00,
+        help_text="Monto prepagado inyectado remotamente al surtidor"
+    )
+    cliente_activo = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='despachos_remotos_actuales',
+        help_text="Usuario dueño de la compra online activa"
+    )
+
+    # =========================================================================
+    # MÉTODO DE NEGOCIO PARA CU 14 - LIMPIEZA DE DATOS POST-DESPACHO
+    # =========================================================================
+    def liberar_surtidor_post_despacho(self):
+        """
+        Limpia los datos transitorios inyectados por la IA (CU 14) 
+        y devuelve el surtidor a estado disponible para el siguiente auto.
+        """
+        self.estado = 'ACTIVO'
+        self.placa_activa = None
+        self.monto_autorizado = 0.00
+        self.cliente_activo = None
+        self.descripcion_falla = None
+        self.save()
+
+    # =========================================================================
 
     class Meta:
         db_table = 'estados_surtidores'

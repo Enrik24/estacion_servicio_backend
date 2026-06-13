@@ -31,7 +31,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-default-key-for-dev')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = ['*']
 
 
 
@@ -207,6 +207,8 @@ if DEBUG:
 #GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
 
 GROQ_API_KEY = config('GROQ_API_KEY', default=None)
+
+TOKEN_PLATERECOGNIZER = config('TOKEN_PLATERECOGNIZER', default=None)
 
 # Email (SMTP Gmail)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

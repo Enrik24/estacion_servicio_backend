@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from usuarios.models import Permiso, Rol, Usuario, Empresa
 from ventas.models import Isla, Lado, TipoCombustible, Sucursal, Cliente, Vehiculo, EmpresaCliente
-
+from monitoreo.models import EstadoSurtidor
 
 class Command(BaseCommand):
     help = 'Seeder principal del sistema'
@@ -181,20 +181,41 @@ class Command(BaseCommand):
                 nombre=s['nombre'],
                 defaults={**s, 'empresa': empresa}
             )
-            if not created and not suc.empresa:
+            if not created:
+                # Actualizar campos aunque ya exista
+                for campo, valor in s.items():
+                    setattr(suc, campo, valor)
                 suc.empresa = empresa
                 suc.save()
             sucursales_creadas[s['nombre']] = suc
+            
+            # Siempre asignar tipos de combustible (no solo si created)
+            suc.tipos_combustible.set(list(tipos_creados.values()))
+            
             if created:
                 self.stdout.write(self.style.SUCCESS(f'  Sucursal creada: {suc.nombre}'))
-                # Crear islas y lados
-                for i in range(1, s['cantidad_islas'] + 1):
-                    isla = Isla.objects.create(numero=i, sucursal=suc, estado='ACTIVO')
-                    Lado.objects.create(isla=isla, lado='A', activo=True)
-                    Lado.objects.create(isla=isla, lado='B', activo=True)
+            
+            # Crear islas y lados solo si no existen
+            for i in range(1, s['cantidad_islas'] + 1):
+                isla, isla_created = Isla.objects.get_or_create(
+                    numero=i, 
+                    sucursal=suc,
+                    defaults={'estado': 'ACTIVO'}
+                )
+                for letra in ['A', 'B']:
+                    lado, lado_created = Lado.objects.get_or_create(
+                        isla=isla,
+                        lado=letra,
+                        defaults={'activo': True}
+                    )
+                    # Crear EstadoSurtidor solo si no existe
+                    EstadoSurtidor.objects.get_or_create(
+                        lado=lado,
+                        defaults={'estado': 'ACTIVO'}
+                    )
+                if isla_created:
                     self.stdout.write(self.style.SUCCESS(f'    Isla {i} creada con lados A y B'))
-
-        suc_norte = sucursales_creadas.get('Surtidor Octano - Norte')
+                suc_norte = sucursales_creadas.get('Surtidor Octano - Norte')
         suc_oeste = sucursales_creadas.get('Surtidor Octano - Oeste')
 
         # ── Usuarios ──────────────────────────────────────────────────────────

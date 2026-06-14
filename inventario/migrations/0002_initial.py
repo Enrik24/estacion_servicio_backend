@@ -7,7 +7,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    initial = True
+    initial = False
 
     dependencies = [
         ('inventario', '0001_initial'),
@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='tanque',
             name='sucursal',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tanques', to='ventas.sucursal'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tanques', to='ventas.sucursal',null=True),
         ),
         migrations.AddField(
             model_name='tanque',

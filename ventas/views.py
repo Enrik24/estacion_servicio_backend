@@ -390,6 +390,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         cliente = serializer.save()
+        print(f"DEBUG - request.user: {request.user.email}, empresa: {request.user.empresa}")
 
         # Crear credenciales automáticas si viene el CI
         credenciales = None
@@ -568,7 +569,8 @@ class VentaViewSet(viewsets.ModelViewSet):
             from django.utils import timezone as tz
             from usuarios.models import LimiteConsumo, Usuario
             from django.db.models import Sum
-            hoy = tz.now().date()
+            from django.utils.timezone import localdate
+            hoy = localdate()
 
             # Buscar usuario por email del cliente
            # Buscar usuario vinculado al cliente
@@ -709,6 +711,19 @@ class VentaViewSet(viewsets.ModelViewSet):
         venta = self.get_object()
         serializer = TicketVentaSerializer(venta)
         return Response(serializer.data)
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def por_usuario_cliente(self, request):
+        """Obtiene ventas de un cliente dado su usuario_id."""
+        usuario_id = request.query_params.get('usuario_id')
+        if not usuario_id:
+            return Response({'error': 'usuario_id requerido'}, status=400)
+        try:
+            from ventas.models import Cliente
+            cliente = Cliente.objects.get(usuario_id=usuario_id)
+            ventas = Venta.objects.filter(cliente=cliente, estado='COMPLETADA')
+            return Response(VentaSerializer(ventas, many=True).data)
+        except Cliente.DoesNotExist:
+            return Response([])
 class VehiculoViewSet(GenericViewSet):
     """ViewSet para gestionar vehículos y búsqueda por placa."""
     queryset = Vehiculo.objects.select_related('cliente').all()
@@ -832,6 +847,12 @@ class VehiculoViewSet(GenericViewSet):
 
                         if rol_cliente:
                             usuario.roles.add(rol_cliente)
+                            # Vincular usuario al cliente y asignar empresa
+                            cliente.usuario = usuario
+                            if not request.user.is_superuser and request.user.empresa:
+                                usuario.empresa = request.user.empresa
+                                usuario.save(update_fields=['empresa'])
+                            cliente.save(update_fields=['usuario'])
 
                         credenciales = {
                             'email': email_generado,

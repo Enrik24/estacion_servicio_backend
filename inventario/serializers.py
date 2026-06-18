@@ -39,11 +39,18 @@ class DescargaCombustibleSerializer(serializers.ModelSerializer):
     tanque_nombre = serializers.CharField(
         source='tanque.__str__', read_only=True
     )
+    tanque_sucursal = serializers.CharField(
+        source='tanque.sucursal.nombre', read_only=True
+    )
+    tanque_tipo_combustible = serializers.CharField(
+        source='tanque.tipo_combustible.get_tipo_display', read_only=True
+    )
 
     class Meta:
         model = DescargaCombustible
         fields = [
-            'id', 'tanque', 'tanque_nombre', 'volumen_descargado',
+            'id', 'tanque', 'tanque_nombre', 'tanque_sucursal',
+            'tanque_tipo_combustible', 'volumen_descargado',
             'nivel_antes', 'nivel_despues', 'registrado_por',
             'registrado_por_nombre', 'observaciones', 'fecha'
         ]

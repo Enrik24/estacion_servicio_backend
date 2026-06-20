@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'inventario',
     'django_crontab',
     'anymail',
+    'dashboard',
 
 ]
 

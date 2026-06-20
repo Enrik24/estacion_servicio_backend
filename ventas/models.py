@@ -16,6 +16,7 @@ class TipoCombustible(models.Model):
     id = models.BigAutoField(primary_key=True)
     tipo = models.CharField(max_length=30, choices=TIPOS, unique=True)
     precio_litro = models.DecimalField(max_digits=10, decimal_places=2)
+    costo_litro = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Costo de compra por litro para calcular ganancias")
     activo = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:

@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Usuario, Rol, Permiso, LimiteConsumo, Empresa
+from ventas.models import Cliente, Sucursal, TipoCombustible
 
 class PermisoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -292,17 +293,34 @@ class ValidarConsumoSerializer(serializers.Serializer):
         return attrs
 
 
+# Reemplaza el PrediccionConsumoRequestSerializer existente
 class PrediccionConsumoRequestSerializer(serializers.Serializer):
     cliente_id = serializers.IntegerField(required=True)
     tipo_periodo = serializers.ChoiceField(choices=LimiteConsumo.TIPOS, required=False, default='DIARIO')
     unidad = serializers.ChoiceField(choices=LimiteConsumo.UNIDADES, required=False, default='MONTO')
-    dias = serializers.IntegerField(required=False, min_value=1, max_value=31, default=7)
+    dias = serializers.IntegerField(required=False, min_value=1, max_value=90, default=7) 
 
     def validate_cliente_id(self, value):
-        if not Usuario.objects.filter(id=value).exists():
+        # Validar contra modelo Cliente de ventas, no Usuario
+        if not Cliente.objects.filter(id=value, activo=True).exists():
             raise serializers.ValidationError('Cliente no encontrado.')
         return value
 
+# Agregar serializer nuevo para sucursal
+class PrediccionSucursalRequestSerializer(serializers.Serializer):
+    sucursal_id = serializers.IntegerField(required=True)
+    tipo_combustible_id = serializers.IntegerField(required=True)
+    dias = serializers.IntegerField(required=False, min_value=1, max_value=90, default=7)
+
+    def validate_sucursal_id(self, value):
+        if not Sucursal.objects.filter(id=value).exists():
+            raise serializers.ValidationError('Sucursal no encontrada.')
+        return value
+
+    def validate_tipo_combustible_id(self, value):
+        if not TipoCombustible.objects.filter(id=value).exists():
+            raise serializers.ValidationError('Tipo de combustible no encontrado.')
+        return value
 class EmpresaSerializer(serializers.ModelSerializer):
     total_usuarios = serializers.SerializerMethodField()
     total_sucursales = serializers.SerializerMethodField()

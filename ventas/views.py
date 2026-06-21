@@ -137,20 +137,48 @@ class TurnoViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        """Crea un turno para el operador actual validando que no tenga uno abierto."""
+        """Crea un turno. Si lo crea admin/gerente, asigna al operador indicado.
+        Si lo crea el propio operador, se asigna a sí mismo."""
+        user = self.request.user
+        rol = user.roles.first()
+        es_supervisor = rol and rol.nombre.lower() in ['administrador', 'gerente']
+
+        operador_id = self.request.data.get('operador_id')
+
+        if es_supervisor and operador_id:
+            try:
+                operador = Usuario.objects.get(id=operador_id, empresa=user.empresa)
+            except Usuario.DoesNotExist:
+                raise ValidationError('Operador no encontrado en tu empresa')
+        else:
+            operador = user
+
         turno_abierto = Turno.objects.filter(
-            operador=self.request.user,
+            operador=operador,
             estado='ABIERTO'
         ).exists()
         if turno_abierto:
-            raise ValidationError('Ya tienes un turno abierto')
-        serializer.save(operador=self.request.user)
+            raise ValidationError(f'{operador.nombre} ya tiene un turno abierto')
+
+        # Validar que no tenga turno en el mismo horario y fecha (CU26 criterio b)
+        from django.utils import timezone
+        hoy = timezone.now().date()
+        horario = self.request.data.get('horario')
+        turno_mismo_horario = Turno.objects.filter(
+            operador=operador,
+            horario=horario,
+            fecha_apertura__date=hoy
+        ).exclude(estado='CERRADO').exists()
+        if turno_mismo_horario:
+            raise ValidationError(f'{operador.nombre} ya tiene un turno asignado en el horario {horario} hoy')
+
+        serializer.save(operador=operador)
 
         registrar_bitacora(
             self.request,
             accion='CREAR',
-            descripcion='Apertura de turno',
-            modulo='Venta y POS'
+            descripcion=f'Asignó turno a {operador.nombre} - Isla {serializer.instance.isla.numero} ({horario})',
+            modulo='Personal y Turnos'
         )
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def cerrar(self, request, pk=None):

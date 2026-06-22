@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ventas', '0003_alter_tipocombustible_unique_together_and_more'),
+        ('ventas', '0002_cliente_usuario'),
         ('ventas', '0006_alter_ordenprepago_precio_por_litro_and_more'),
     ]
 

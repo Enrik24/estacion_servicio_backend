@@ -1,12 +1,16 @@
 from rest_framework import viewsets, status
+from rest_framework import permissions as rest_permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 
 from seguridad.models import registrar_bitacora
-from .models import Tanque, DescargaCombustible
-from .serializers import TanqueSerializer, DescargaCombustibleSerializer
+from usuarios import permissions
+from ventas.models import TipoCombustible
+from ventas.serializers import TipoCombustibleSerializer
+from .models import Tanque, DescargaCombustible, PagoProveedor , OrdenCompra
+from .serializers import TanqueSerializer, DescargaCombustibleSerializer, PagoProveedorSerializer, OrdenCompraSerializer
 from decimal import Decimal
 
 class TanqueViewSet(viewsets.ModelViewSet):
@@ -144,3 +148,95 @@ class DescargaViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(tanque__sucursal=user.sucursal)
             return qs
         return DescargaCombustible.objects.none()
+    
+# ── CONTROLLER PARA EL CU 19: ÓRDENES DE COMPRA ─────────────────────────────
+class OrdenCompraViewSet(viewsets.ModelViewSet):
+    serializer_class = OrdenCompraSerializer
+    permission_classes = [rest_permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        usuario_actual = self.request.user
+        
+        if usuario_actual.is_superuser:
+            return OrdenCompra.objects.all().order_by('-fecha_emision')
+            
+        if not usuario_actual.empresa:
+            return OrdenCompra.objects.none()
+            
+        # FILTRO DIRECTO MULTITENANT: Muestra las órdenes de la empresa del usuario
+        return OrdenCompra.objects.filter(
+            creado_por__empresa=usuario_actual.empresa
+        ).order_by('-fecha_emision')
+
+    def perform_create(self, serializer):
+        # Al guardar, Django ya sabe quién la crea
+        serializer.save(creado_por=self.request.user)
+
+
+# ── CONTROLLER PARA EL CU 20: PAGOS A PROVEEDORES (PREPAGO) ────────────────
+class PagoProveedorViewSet(viewsets.ModelViewSet):
+    serializer_class = PagoProveedorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        usuario_actual = self.request.user
+        if usuario_actual.is_superuser:
+            return PagoProveedor.objects.all().order_by('-fecha_pago')
+        if not usuario_actual.empresa:
+            return PagoProveedor.objects.none()
+        return PagoProveedor.objects.filter(registrado_por__empresa=usuario_actual.empresa).order_by('-fecha_pago')
+
+    # === INTERCEPCIÓN FORZADA DE TIPOS EN LA VISTA ===
+    def create(self, request, *args, **kwargs):
+        # 1. DEPURACIÓN DE EMERGENCIA: Ver qué diablos está mandando React
+        print("*" * 50)
+        print("TIPO DE DATA RECIBIDA:", type(request.data))
+        print("CONTENIDO DE REQUEST.DATA:", request.data)
+        print("*" * 50)
+
+        # 2. Copiamos los datos para limpiarlos
+        data = request.data.copy()
+        
+        # Extracción segura: Si viene como lista (QueryDict de FormData), sacamos el primer elemento
+        def limpiar_valor(campo):
+            valor = data.get(campo)
+            if isinstance(valor, list) and len(valor) > 0:
+                valor = valor[0]
+            return str(valor).strip() if valor is not None else None
+
+        oc_val = limpiar_valor('orden_compra')
+        monto_val = limpiar_valor('monto_pagado')
+        metodo_val = limpiar_valor('metodo_pago')
+
+        # 3. Forzar conversión destructiva (Si falla, asigna None para que DRF de un error limpio, no un crash de tipos)
+        if oc_val:
+            try:
+                data['orden_compra'] = int(oc_val)
+            except (ValueError, TypeError):
+                pass
+
+        if monto_val:
+            try:
+                data['monto_pagado'] = float(monto_val)
+            except (ValueError, TypeError):
+                pass
+
+        if metodo_val in ['undefined', '', None, 'null']:
+            data['metodo_pago'] = 'TRANSFERENCIA'
+        else:
+            data['metodo_pago'] = metodo_val
+
+        # 4. Validar y guardar
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def perform_create(self, serializer):
+        # Inyectamos el usuario de la sesión (Bryan)
+        serializer.save(registrado_por=self.request.user)
+class TipoCombustibleViewSet(viewsets.ModelViewSet):
+    queryset = TipoCombustible.objects.filter(activo=True)
+    serializer_class = TipoCombustibleSerializer
+    permission_classes = [rest_permissions.IsAuthenticated]

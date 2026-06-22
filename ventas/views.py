@@ -1485,13 +1485,17 @@ class StripeWebhookAPIView(APIView):
         payload = request.data
         event_type = payload.get('type')
 
-        # Despachar al manejador correcto según el tipo de evento de Stripe
+        logger.info(f"[WEBHOOK] Evento recibido: {event_type}")
+        logger.info(f"[WEBHOOK] Payload keys: {list(payload.keys()) if payload else 'VACIO'}")
+
         if event_type == 'payment_intent.succeeded':
+            logger.info(f"[WEBHOOK] Procesando pago exitoso")
             self._handle_success(payload, request)
         elif event_type == 'payment_intent.payment_failed':
             self._handle_failure(payload)
+        else:
+            logger.warning(f"[WEBHOOK] Evento no manejado: {event_type}")
 
-        # Siempre retornar 200 para que Stripe no reintente el webhook
         return Response(status=status.HTTP_200_OK)
 
     def _handle_success(self, payload, request):
@@ -1499,39 +1503,41 @@ class StripeWebhookAPIView(APIView):
         payment_intent = payload.get('data', {}).get('object', {})
         pi_id = payment_intent.get('id')
 
-        # Buscar la orden en BD. Si no existe (ej. webhook duplicado) solo loggeamos.
+        logger.info(f"[WEBHOOK SUCCESS] PI ID: {pi_id}")
+
         try:
             orden = OrdenPrepago.objects.get(
                 stripe_payment_intent_id=pi_id,
                 estado__in=['PENDIENTE', 'PROCESANDO_PAGO'],
             )
+            logger.info(f"[WEBHOOK SUCCESS] Orden encontrada: {orden.numero_orden} estado: {orden.estado}")
         except OrdenPrepago.DoesNotExist:
-            logger.warning(f"Webhook: Orden no encontrada para PI {pi_id}")
+            logger.warning(f"[WEBHOOK SUCCESS] Orden NO encontrada para PI {pi_id}")
+            try:
+                orden_any = OrdenPrepago.objects.get(stripe_payment_intent_id=pi_id)
+                logger.warning(f"[WEBHOOK SUCCESS] Orden existe pero con estado: {orden_any.estado}")
+            except OrdenPrepago.DoesNotExist:
+                logger.error(f"[WEBHOOK SUCCESS] Orden NO existe en BD para PI {pi_id}")
             return
 
-        # Marcar la orden como PAGADO en la BD
         orden.estado = 'PAGADO'
         orden.save()
+        logger.info(f"[WEBHOOK SUCCESS] Orden {orden.numero_orden} marcada como PAGADO")
 
-        # Generar el comprobante PDF y guardarlo en media/comprobantes/
-        # Si falla la generación del PDF la orden ya quedó PAGADO (no se revierte)
         try:
             from utils.pdf_generator import generar_comprobante_pdf
             generar_comprobante_pdf(orden)
         except Exception as e:
             logger.error(f"Error generando PDF para orden {orden.numero_orden}: {e}")
 
-        # Enviar el comprobante por email al cliente
-        # Igual que el PDF: si falla el email la orden sigue siendo válida
         try:
             from utils.email_sender import enviar_email_comprobante
             enviar_email_comprobante(orden)
         except Exception as e:
             logger.error(f"Error enviando email para orden {orden.numero_orden}: {e}")
 
-        # Registrar la operación en la bitácora del sistema para auditoría
         registrar_bitacora(
-            request=None,  # No hay usuario autenticado en el webhook, viene de Stripe
+            request=None,
             accion='CREAR',
             modulo='Ventas',
             descripcion=f'PREPAGO_CREADO - Orden {orden.numero_orden} - Bs. {orden.monto_total} - Cliente {orden.cliente.nombre}',

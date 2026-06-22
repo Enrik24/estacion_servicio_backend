@@ -152,7 +152,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         
         if empresa_admin and not admin_creador.is_superuser:
             # Extraemos la marca de la empresa (Ej: "Genex" o "Surtidor Octano")
-            prefijo_empresa = empresa_admin.razon_social
+            prefijo_empresa = empresa_admin.nombre
             
             # Formateamos el nombre de manera paramétrica si no contiene ya el prefijo
             if prefijo_empresa.lower() not in nombre_original.lower():

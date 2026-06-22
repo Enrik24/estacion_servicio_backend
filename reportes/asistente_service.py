@@ -306,7 +306,7 @@ def _datos_prediccion(sucursal_id, params):
         tipo_periodo=params.get('tipo_periodo', 'DIARIO'),
         unidad=params.get('unidad', 'MONTO'),
         dias=int(params.get('dias', 7) or 7),
-        sucursal_id=sucursal_id,
+
     )
     # Recortar para el prompt: lo esencial
     return {

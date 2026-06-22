@@ -66,7 +66,7 @@ class OrdenCompraSerializer(serializers.ModelSerializer):
     
     # EXTRACCIÓN DINÁMICA MEDIANTE EL USUARIO PROPIETARIO:
     sucursal_nombre = serializers.CharField(source='creado_por.sucursal.nombre', read_only=True)
-    empresa_nombre = serializers.CharField(source='creado_por.sucursal.empresa.razon_social', read_only=True)
+    empresa_nombre = serializers.CharField(source='creado_por.sucursal.empresa.nombre', read_only=True)
     empresa_nit = serializers.CharField(source='creado_por.sucursal.empresa.nit', read_only=True)
     
     class Meta:

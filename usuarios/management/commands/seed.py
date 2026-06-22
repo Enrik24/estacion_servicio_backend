@@ -137,17 +137,18 @@ class Command(BaseCommand):
 
         # ── Tipos de combustible ──────────────────────────────────────────────
         tipos_data = [
-            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96},
-            {'tipo': 'GASOLINA_PREMIUM',  'precio_litro': 11.00},
-            {'tipo': 'DIESEL',            'precio_litro': 9.80},
+            {'tipo': 'GASOLINA_ESPECIAL', 'precio_litro': 6.96, 'costo_litro': 6.00},
+            {'tipo': 'GASOLINA_PREMIUM',  'precio_litro': 11.00, 'costo_litro': 9.50},
+            {'tipo': 'DIESEL',            'precio_litro': 9.80, 'costo_litro': 8.50},
+            {'tipo': 'GNV',               'precio_litro': 2.73, 'costo_litro': 1.50},
         ]
 
         tipos_creados = {}
         for t in tipos_data:
-            obj, created = TipoCombustible.objects.get_or_create(
+            obj, created = TipoCombustible.objects.update_or_create(
                 tipo=t['tipo'],
                 empresa=empresa,
-                defaults={'precio_litro': t['precio_litro'], 'activo': True}
+                defaults={'precio_litro': t['precio_litro'], 'costo_litro': t['costo_litro'], 'activo': True}
             )
             tipos_creados[t['tipo']] = obj
             if created:
@@ -361,7 +362,7 @@ class Command(BaseCommand):
             EmpresaCliente.objects.get_or_create(empresa=empresa, cliente=cliente)
 
         # ── Resumen ───────────────────────────────────────────────────────────
-        self.stdout.write(self.style.SUCCESS('\n✅ Seed completado exitosamente!'))
+        self.stdout.write(self.style.SUCCESS('\n[EXITO] Seed completado exitosamente!'))
         self.stdout.write(self.style.NOTICE('\nCredenciales:'))
         self.stdout.write('  Super Admin:     superadmin@surtidor.com     / super123')
         self.stdout.write('  Admin:           admin@estacion.com           / admin123')

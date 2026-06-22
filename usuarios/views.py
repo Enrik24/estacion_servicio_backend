@@ -348,6 +348,10 @@ class LimiteConsumoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        # Multi-tenant: solo límites de clientes de la sucursal
+        sucursal_id = getattr(self.request.user, 'sucursal_id', None)
+        if sucursal_id:
+            queryset = queryset.filter(cliente__sucursal_id=sucursal_id)
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(

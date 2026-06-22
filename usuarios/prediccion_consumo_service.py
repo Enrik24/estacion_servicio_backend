@@ -4,6 +4,7 @@ import json
 import pandas as pd
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from django.db.models import Sum
 from django.utils import timezone
 from ventas.models import Venta, TipoCombustible
 
@@ -52,7 +53,7 @@ def _predecir_dia(model, fecha, cliente_id, sucursal_id, tipo_combustible_id, ro
     return max(5.0, round(litros, 2))
 
 
-def generar_prediccion_consumo(*, cliente_id, tipo_periodo, unidad, dias=7):
+def generar_prediccion_consumo(*, cliente_id, tipo_periodo, unidad, dias=7, tipo_combustible_id=None):
     model, metadata = _cargar_modelo()
     hoy = timezone.localdate()
 
@@ -60,7 +61,8 @@ def generar_prediccion_consumo(*, cliente_id, tipo_periodo, unidad, dias=7):
     rolling_mean = _rolling_mean(ventas_qs)
 
     tipo_mas_usado = ventas_qs.values('tipo_combustible_id').order_by('tipo_combustible_id').first()
-    tipo_combustible_id = tipo_mas_usado['tipo_combustible_id'] if tipo_mas_usado else 1
+    if not tipo_combustible_id:
+        tipo_combustible_id = tipo_mas_usado['tipo_combustible_id'] if tipo_mas_usado else 1
 
     turno_reciente = ventas_qs.select_related('turno').order_by('-fecha_hora').first()
     sucursal_id = turno_reciente.turno.sucursal_id if turno_reciente and turno_reciente.turno else 0
@@ -116,9 +118,8 @@ def generar_prediccion_sucursal(*, sucursal_id, tipo_combustible_id, dias=7):
     model, metadata = _cargar_modelo()
     hoy = timezone.localdate()
 
-    # Obtener ventas históricas de los últimos 30 días para calcular promedio real
-    from django.utils import timezone as tz
     from datetime import timedelta
+    from django.db.models.functions import TruncDate
     fecha_inicio = hoy - timedelta(days=30)
 
     ventas_qs = Venta.objects.filter(
@@ -128,10 +129,6 @@ def generar_prediccion_sucursal(*, sucursal_id, tipo_combustible_id, dias=7):
         fecha_hora__date__gte=fecha_inicio,
     )
 
-    # Agrupar por día para obtener promedio diario real
-    from django.db.models import Sum
-    from django.db.models.functions import TruncDate
-
     ventas_por_dia = (
         ventas_qs
         .annotate(dia=TruncDate('fecha_hora'))
@@ -140,7 +137,6 @@ def generar_prediccion_sucursal(*, sucursal_id, tipo_combustible_id, dias=7):
         .order_by('dia')
     )
 
-    # Rolling mean de los últimos 7 días con datos reales
     litros_por_dia = [float(v['total_litros']) for v in ventas_por_dia]
     rolling_mean = sum(litros_por_dia[-7:]) / len(litros_por_dia[-7:]) if litros_por_dia else 300.0
 
@@ -152,7 +148,6 @@ def generar_prediccion_sucursal(*, sucursal_id, tipo_combustible_id, dias=7):
         factor = [0.85, 0.90, 1.0, 1.0, 1.15, 1.25, 0.75][fecha.weekday()]
 
         if model:
-            # Predecir para múltiples clientes y sumar
             clientes_activos = (
                 Venta.objects.filter(
                     turno__sucursal_id=sucursal_id,
@@ -176,7 +171,6 @@ def generar_prediccion_sucursal(*, sucursal_id, tipo_combustible_id, dias=7):
                 litros = _predecir_dia(model, fecha, cid or 0, sucursal_id, tipo_combustible_id, rm)
                 total_litros_dia += _to_decimal(litros)
 
-            # Ajustar por factor día de semana
             litros_pred = float(_to_decimal(total_litros_dia * Decimal(str(factor))))
         else:
             litros_pred = round(rolling_mean * factor, 2)

@@ -295,7 +295,8 @@ class ValidarConsumoSerializer(serializers.Serializer):
 
 # Reemplaza el PrediccionConsumoRequestSerializer existente
 class PrediccionConsumoRequestSerializer(serializers.Serializer):
-    cliente_id = serializers.IntegerField(required=True)
+    cliente_id = serializers.IntegerField(required=False, default=None)
+    tipo_combustible_id = serializers.IntegerField(required=False, default=None)
     tipo_periodo = serializers.ChoiceField(choices=LimiteConsumo.TIPOS, required=False, default='DIARIO')
     unidad = serializers.ChoiceField(choices=LimiteConsumo.UNIDADES, required=False, default='MONTO')
     dias = serializers.IntegerField(required=False, min_value=1, max_value=90, default=7) 

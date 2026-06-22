@@ -14,7 +14,8 @@ class PrediccionConsumoAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         resultado = generar_prediccion_consumo(
-            cliente_id=data["cliente_id"],
+            cliente_id=data.get("cliente_id"),
+            tipo_combustible_id=data.get("tipo_combustible_id"),
             tipo_periodo=data["tipo_periodo"],
             unidad=data["unidad"],
             dias=data["dias"],

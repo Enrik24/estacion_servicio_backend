@@ -393,7 +393,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        print(f"DEBUG - user: {user.email}, is_superuser: {user.is_superuser}, empresa: {user.empresa}")
         if user.is_superuser:
             qs = Cliente.objects.filter(activo=True)
         elif user.empresa:
@@ -405,10 +404,8 @@ class ClienteViewSet(viewsets.ModelViewSet):
             return Cliente.objects.none()
 
         search = self.request.query_params.get('search', '')
-        print(f"DEBUG - search: '{search}', total antes: {qs.count()}")
         if search:
             qs = qs.filter(nombre__icontains=search)
-        print(f"DEBUG - total después: {qs.count()}")
         
         return qs
 

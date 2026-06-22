@@ -185,7 +185,7 @@ def reporte_turnos(request):
             'id':              turno.id,
             'operador':        turno.operador.nombre,
             'isla':            turno.isla.numero,
-            'horario':         turno.get_horario_display(),
+            'horario':         turno.get_horario_display(),  # pyright: ignore[reportAttributeAccessIssue]  # Django genera get_<campo>_display() por choices
             'horario_codigo':  turno.horario,
             'estado':          turno.estado,
             'fecha_apertura':  turno.fecha_apertura,
@@ -364,7 +364,7 @@ def reporte_islas(request):
         )
 
         lados_data = []
-        for lado in isla.lados.all():
+        for lado in isla.lados.all():  # pyright: ignore[reportAttributeAccessIssue]  # 'lados' = related_name inverso de Lado.isla
             ventas_lado = ventas_isla.filter(lado=lado)
             agg_lado = ventas_lado.aggregate(
                 total_recaudado=Coalesce(Sum('total'), Decimal('0')),
@@ -523,6 +523,57 @@ JSON:"""
     return Response(resultado)
 
 
+# ── Asistente Conversacional con IA ───────────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def asistente_ia(request):
+    """
+    Asistente conversacional: responde preguntas en lenguaje natural sobre
+    ventas, clientes, turnos, combustibles y predicciones de demanda,
+    consultando los datos reales de la sucursal del usuario (multi-tenant).
+
+    Body esperado:
+    {
+        "pregunta": "¿cuánto diésel vendí esta semana?",
+        "historial": [ {"rol": "usuario", "contenido": "..."}, {"rol": "asistente", "contenido": "..."} ]
+    }
+
+    Respuesta:
+    {
+        "respuesta": "Esta semana despachaste 3.120 L de diésel por Bs. 12.480,00 ...",
+        "intencion": "ventas",
+        "params": { ... },
+        "datos": { ... },
+        "sugerencias": [ "...", "..." ],
+        "modelo": "asistente_conversacional_v1"
+    }
+    """
+    from .asistente_service import responder_asistente
+
+    pregunta = (request.data.get('pregunta') or request.data.get('texto') or '').strip()
+    if not pregunta:
+        return Response({'error': 'El campo "pregunta" es requerido y no puede estar vacío.'}, status=400)
+
+    historial = request.data.get('historial') or []
+    if not isinstance(historial, list):
+        historial = []
+
+    # Multi-tenant: alcance a la sucursal del usuario autenticado
+    sucursal_id = getattr(request.user, 'sucursal_id', None)
+
+    try:
+        resultado = responder_asistente(pregunta, sucursal_id=sucursal_id, historial=historial)
+    except Exception as e:
+        return Response(
+            {'error': f'No se pudo procesar la consulta del asistente: {str(e)}'},
+            status=500,
+        )
+
+    registrar_bitacora(request, accion='CONSULTAR', descripcion=f'Consultó al asistente IA: "{pregunta[:100]}"', modulo='Asistente IA')
+
+    return Response(resultado)
+
+
 # ── Enviar Reporte por Email ──────────────────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, ReportesPermiso])
@@ -584,7 +635,7 @@ def enviar_reporte_email(request):
     except Exception as e:
         return Response({'error': f'Error al enviar el email: {str(e)}'}, status=500)
 
-    _registrar_bitacora(
+    registrar_bitacora(
         request,
         f'Envió reporte de {tipo_reporte} en formato {formato} a {destinatario}',
     )
@@ -601,6 +652,7 @@ def _generar_excel(columnas, datos, tipo_reporte):
 
     wb = Workbook()
     ws = wb.active
+    assert ws is not None  # openpyxl tipa wb.active como Optional; un Workbook nuevo siempre tiene hoja activa
     ws.title = tipo_reporte.capitalize()
 
     # Estilo de cabecera
@@ -622,7 +674,7 @@ def _generar_excel(columnas, datos, tipo_reporte):
     # Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_len = max((len(str(cell.value)) if cell.value else 0) for cell in col)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)  # pyright: ignore[reportAttributeAccessIssue]  # col[0] es Cell, no MergedCell
 
     buffer = io.BytesIO()
     wb.save(buffer)

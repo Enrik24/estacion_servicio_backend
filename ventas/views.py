@@ -368,6 +368,8 @@ class TurnoViewSet(viewsets.ModelViewSet):
                 'id': turno.id,
                 'operador': turno.operador.nombre,
                 'isla': turno.isla.numero,
+                'isla_id': turno.isla.id,  # 👈 agregar
+                'sucursal_id': turno.isla.sucursal_id,  # 👈 agregar
                 'horario': turno.get_horario_display(),
                 'horario_codigo': turno.horario,
                 'estado': turno.estado,
@@ -1111,19 +1113,33 @@ class SucursalViewSet(viewsets.ModelViewSet):
             isla = Isla.objects.create(numero=i, sucursal=sucursal, estado='ACTIVO')
             for letra in ['A', 'B']:
                 lado = Lado.objects.create(isla=isla, lado=letra, activo=True)
-                EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO')  # 👈 faltaba esto
+                EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO') 
         registrar_bitacora(self.request, accion='CREAR', descripcion=f'Creó la sucursal: {sucursal.nombre}', modulo='Sucursales')
 
     def perform_update(self, serializer):
         from monitoreo.models import EstadoSurtidor
+        from rest_framework.exceptions import ValidationError
+        
         tipos = self.request.data.get('tipos_combustible', [])
+        
+        # Obtener la sucursal actual ANTES de guardar
+        sucursal = self.get_object()
+        num_islas = serializer.validated_data.get('cantidad_islas', sucursal.cantidad_islas)
+        islas_actuales = sucursal.islas.count()
+
+        # Validar ANTES de guardar
+        if num_islas < islas_actuales:
+            islas_a_eliminar = sucursal.islas.filter(numero__gt=num_islas)
+            for isla in islas_a_eliminar:
+                if isla.turnos.exists() or isla.lados.filter(ventas__isnull=False).exists():
+                    raise ValidationError(
+                        f'No se puede reducir islas. La isla {isla.numero} tiene ventas o turnos registrados.'
+                    )
+
+        # Ahora sí guardar
         sucursal = serializer.save()
         if tipos:
             sucursal.tipos_combustible.set(tipos)
-
-        # Sincronizar islas reales
-        num_islas = sucursal.cantidad_islas
-        islas_actuales = sucursal.islas.count()
 
         # Crear islas faltantes
         for i in range(islas_actuales + 1, num_islas + 1):
@@ -1132,19 +1148,19 @@ class SucursalViewSet(viewsets.ModelViewSet):
                 lado = Lado.objects.create(isla=isla, lado=letra, activo=True)
                 EstadoSurtidor.objects.create(lado=lado, estado='ACTIVO')
 
-        # Eliminar islas sobrantes
+        # Eliminar islas sobrantes (ya validado)
         if num_islas < islas_actuales:
             sucursal.islas.filter(numero__gt=num_islas).order_by('-numero').delete()
 
         registrar_bitacora(self.request, accion='EDITAR', descripcion=f'Editó la sucursal: {sucursal.nombre}', modulo='Sucursales')
-        def perform_destroy(self, instance):
-            registrar_bitacora(
-                self.request,
-                accion='ELIMINAR',
-                modulo='Sucursales',
-                descripcion=f'Eliminó la sucursal: {instance.nombre}',
-            )
-            instance.delete()
+    def perform_destroy(self, instance):
+        registrar_bitacora(
+            self.request,
+            accion='ELIMINAR',
+            modulo='Sucursales',
+            descripcion=f'Eliminó la sucursal: {instance.nombre}',
+        )
+        instance.delete()
 
 class ConsolidacionCajaViewSet(viewsets.GenericViewSet):
     """ViewSet para gestionar la consolidación de caja y reportes de cierre de turnos.

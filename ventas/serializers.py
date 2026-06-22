@@ -13,6 +13,7 @@ from django.db.models import Sum, Case, When, DecimalField
 class IslaSerializer(serializers.ModelSerializer):
     """Serializador para el modelo Isla. Incluye los lados activos de cada isla."""
     lados = serializers.SerializerMethodField()
+    sucursal_nombre = serializers.CharField(source='sucursal.nombre', read_only=True)
 
     class Meta:
         model = Isla

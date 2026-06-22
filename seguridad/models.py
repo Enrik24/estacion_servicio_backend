@@ -58,12 +58,23 @@ def registrar_bitacora(request, accion, descripcion, estado='EXITO', modulo='Sis
     try:
         usuario_log = usuario or (request.user if request.user.is_authenticated else None)
         empresa = getattr(usuario_log, 'empresa', None) if usuario_log else None
+        
+        # Obtener rol de forma segura
+        rol_nombre = 'Sin rol'
+        if usuario_log:
+            try:
+                rol = usuario_log.roles.first()
+                if rol:
+                    rol_nombre = rol.nombre
+            except Exception:
+                rol_nombre = 'Sin rol'
+
         Bitacora.objects.create(
             usuario=usuario_log,
             empresa=empresa,
             usuario_email=getattr(usuario_log, 'email', None),
             usuario_nombre=getattr(usuario_log, 'nombre', None),
-            usuario_rol=getattr(usuario_log, 'nombre_rol', 'Sin rol') if usuario_log else 'Sin rol',
+            usuario_rol=rol_nombre,
             accion=accion,
             estado=estado,
             modulo_afectado=modulo,

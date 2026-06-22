@@ -1,16 +1,16 @@
 {
-  "model_version": "rf-20260620202145",
+  "model_version": "rf-20260623233648",
   "modelo_nombre": "random_forest_regressor",
-  "trained_at": "2026-06-21T00:21:45.785907+00:00",
-  "dataset_size": 7117,
+  "trained_at": "2026-06-24T03:36:48.053256+00:00",
+  "dataset_size": 2271,
   "splits": {
-    "train": 5693,
-    "test": 1424
+    "train": 1816,
+    "test": 455
   },
   "metricas_test": {
-    "mae": 16.043548837630127,
-    "rmse": 19.071397787500036,
-    "mape": 52.470549220569026
+    "mae": 6.745782819375431,
+    "rmse": 8.694466430456215,
+    "mape": 11.607087109434588
   },
   "feature_order": [
     "cliente_id",

@@ -217,7 +217,7 @@ class Command(BaseCommand):
                 if isla_created:
                     self.stdout.write(self.style.SUCCESS(f'    Isla {i} creada con lados A y B'))
                 suc_norte = sucursales_creadas.get('Surtidor Octano - Norte')
-        suc_oeste = sucursales_creadas.get('Surtidor Octano - Oeste')
+                suc_oeste = sucursales_creadas.get('Surtidor Octano - Oeste')
 
         # ── Usuarios ──────────────────────────────────────────────────────────
         usuarios_data = [

@@ -976,12 +976,9 @@ def register_view(request):
 
             email_enviado = True
             try:
-                _send_verification_email(usuario, verification_token)
+             _send_verification_email(usuario, verification_token)
             except Exception:
-                if settings.DEBUG:
-                    email_enviado = False
-                else:
-                    raise
+                email_enviado = False  # No lanzar excepción aunque falle el email
     except Exception:
         Bitacora.objects.create(
             usuario=None,

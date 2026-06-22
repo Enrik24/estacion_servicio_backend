@@ -51,6 +51,11 @@ class Command(BaseCommand):
             {'codigo': 'limites_consumo.editar', 'nombre': 'Editar límites de consumo'},
             {'codigo': 'limites_consumo.eliminar','nombre': 'Eliminar límites de consumo'},
             {'codigo': 'limites_consumo.validar','nombre': 'Validar consumo'},
+            {'codigo': 'combustibles.ver',      'nombre': 'Ver Combustibles'},
+            {'codigo': 'combustibles.crear',    'nombre': 'Crear Combustibles'},
+            {'codigo': 'combustibles.editar',   'nombre': 'Editar Combustibles'},
+            {'codigo': 'combustibles.eliminar', 'nombre': 'Eliminar Combustibles'},
+            {'codigo': 'dashboard.ver',         'nombre': 'Ver dashboard'},
         ]
 
         permisos_creados = {}
@@ -73,8 +78,9 @@ class Command(BaseCommand):
             'ventas.ver', 'ventas.registrar', 'ventas.anular',
             'surtidores.ver', 'surtidores.crear', 'surtidores.editar',
             'clientes.ver', 'clientes.crear', 'clientes.editar',
-            'sucursales.ver', 'sucursales.editar', 'reportes.ver',
+            'sucursales.ver', 'sucursales.editar', 'reportes.ver','dashboard.ver',
             'limites_consumo.ver', 'limites_consumo.crear', 'limites_consumo.editar',
+
         ]]
         permisos_operador = [permisos_creados.get(c) for c in [
             'turnos.ver', 'turnos.abrir', 'turnos.cerrar',

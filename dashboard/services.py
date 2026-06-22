@@ -50,7 +50,11 @@ class DashboardService:
         """
         Agrupa las ventas según el horario del turno (MAÑANA, TARDE, NOCHE).
         """
+        # Solo tomamos en cuenta las ventas que finalizaron correctamente
         ventas_completadas = ventas_qs.filter(estado='COMPLETADA')
+        
+        # Usamos .values() para agrupar por el atributo 'horario' de la tabla 'Turno'
+        # Usamos .annotate() para realizar las sumatorias por cada grupo resultante
         turnos_agrupados = ventas_completadas.values('turno__horario').annotate(
             litros=Sum('litros'),
             total_bs=Sum('total')
@@ -72,11 +76,15 @@ class DashboardService:
         Obtiene la distribución de métodos de pago y calcula su porcentaje
         respecto al total.
         """
+        # Excluimos transacciones no finalizadas
         ventas_completadas = ventas_qs.filter(estado='COMPLETADA')
         
-        # Primero obtenemos el total general para calcular porcentajes
+        # Calculamos primero la suma total general de todas las ventas del QuerySet
+        # Esto nos servirá como base (denominador) para calcular el porcentaje de cada método de pago
         total_general = ventas_completadas.aggregate(Sum('total'))['total__sum'] or 0.0
         
+        # Agrupamos por 'metodo_pago' (ej. EFECTIVO, QR, TARJETA) y sumamos sus totales.
+        # Luego ordenamos de mayor a menor recaudación ('-total_bs')
         pagos_agrupados = ventas_completadas.values('metodo_pago').annotate(
             total_bs=Sum('total')
         ).order_by('-total_bs')
@@ -99,7 +107,11 @@ class DashboardService:
         """
         Agrupa las ventas por Isla y Lado para ver cuáles despachan más.
         """
+        # Descartamos operaciones fallidas o en curso
         ventas_completadas = ventas_qs.filter(estado='COMPLETADA')
+        
+        # Agrupamos de forma compuesta por el número de la Isla y la letra del Lado (A, B)
+        # para diferenciar exactamente de qué manguera/surtidor salieron los litros
         surtidores_agrupados = ventas_completadas.values(
             'lado__isla__numero', 
             'lado__lado'
@@ -126,13 +138,18 @@ class DashboardService:
         Retorna el conteo de surtidores Activos, Inactivos o en Falla.
         Filtra por sucursal o empresa según corresponda al usuario.
         """
+        # Iniciamos consultando la totalidad de las islas del sistema
         islas = Isla.objects.all()
         
+        # Aplicamos seguridad: filtramos dependiendo de los permisos del usuario
+        # Si tiene una sucursal en específico, solo veremos las islas de esa sucursal
         if sucursal:
             islas = islas.filter(sucursal=sucursal)
+        # Si tiene permiso de empresa (Administrador), veremos las islas de todas sus sucursales
         elif empresa:
             islas = islas.filter(sucursal__empresa=empresa)
             
+        # Agrupamos por el estado actual de la isla (ACTIVO, INACTIVO, FALLA) y contamos cuántas hay
         estados = islas.values('estado').annotate(cantidad=Count('id'))
         
         # Estructura por defecto

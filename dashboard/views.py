@@ -14,44 +14,69 @@ class DashboardKPIsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # ==========================================
         # 1. Obtener parámetros de fecha
+        # ==========================================
+        # Se extraen las fechas de inicio y fin desde la URL (query parameters).
         fecha_inicio_str = request.query_params.get('fecha_inicio')
         fecha_fin_str = request.query_params.get('fecha_fin')
         
         hoy = timezone.now().date()
         
-        # Filtro por defecto: desde el día 1 del mes actual hasta hoy
+        # Filtro por defecto: Si no se especifica fecha de inicio, se toma el día 1 del mes actual.
         if not fecha_inicio_str:
             fecha_inicio = hoy.replace(day=1)
         else:
             try:
+                # Parsear el string de la fecha a un objeto Date
                 fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
             except ValueError:
                 return Response({'error': 'Formato de fecha_inicio inválido. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
                 
+        # Filtro por defecto: Si no se especifica fecha de fin, se toma el día de hoy.
         if not fecha_fin_str:
             fecha_fin = hoy
         else:
             try:
+                # Parsear el string de la fecha a un objeto Date
                 fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
             except ValueError:
                 return Response({'error': 'Formato de fecha_fin inválido. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ==========================================
         # 2. Control de Acceso (RBAC) - Filtrado Base
+        # ==========================================
+        # Extraemos el usuario que está realizando la petición a la API.
         usuario = request.user
+        
+        # Validación principal: Verificamos si el usuario es un superusuario (acceso total) 
+        # o si tiene explícitamente el permiso 'dashboard.ver' (ej. Gerentes o Administradores).
+        if not (usuario.is_superuser or usuario.tiene_permiso('dashboard.ver')):
+            return Response(
+                {'error': 'No tiene permisos suficientes para ver el dashboard.'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Filtramos inicialmente todas las ventas para que solo correspondan al rango de fechas solicitado.
         ventas_qs = Venta.objects.filter(fecha_hora__date__range=[fecha_inicio, fecha_fin])
         
+        # Estas variables nos ayudarán a saber si estamos filtrando a nivel de empresa o de sucursal
         sucursal_filtro = None
         empresa_filtro = None
 
-        if usuario.is_superuser or usuario.tiene_permiso('reportes.ver'):
-            # Administradores pueden ver todas las sucursales de la empresa
+        # Acceso global para el Administrador
+        # Si el usuario es superusuario o tiene el rol de Administrador, puede ver la información consolidada 
+        # de TODAS las sucursales que pertenecen a su empresa.
+        if usuario.is_superuser or usuario.nombre_rol.lower() == 'administrador':
             empresa_filtro = usuario.empresa
             ventas_qs = ventas_qs.filter(turno__isla__sucursal__empresa=empresa_filtro)
         else:
-            # Gerentes / Operadores solo ven su propia sucursal
+            # Acceso restringido para Gerentes
+            # Si no es Administrador, restringimos el QuerySet para que solo traiga las ventas de la sucursal 
+            # a la que está asignado el usuario.
             sucursal_filtro = usuario.sucursal
             if not sucursal_filtro:
+                # Un gerente que no tiene sucursal asignada no debe poder consultar datos
                 return Response({'error': 'El usuario no tiene una sucursal asignada.'}, status=status.HTTP_403_FORBIDDEN)
             ventas_qs = ventas_qs.filter(turno__isla__sucursal=sucursal_filtro)
 

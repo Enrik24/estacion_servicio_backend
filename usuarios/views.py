@@ -115,12 +115,16 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_superuser:
             return Usuario.objects.all().order_by('id')
+            
+        # Filtro estricto por Tenant (Empresa)
         if user.empresa:
             qs = Usuario.objects.filter(empresa=user.empresa).order_by('id')
             rol = user.roles.first()
+            # Si es gerente, restringimos a nivel de sucursal física
             if rol and 'gerente' in rol.nombre.lower() and user.sucursal:
                 qs = qs.filter(sucursal=user.sucursal)
             return qs
+            
         return Usuario.objects.none()
     def get_permissions(self):
         if self.action == 'create':
@@ -131,12 +135,45 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), HasPermiso(permiso='usuarios.eliminar')]
         return super().get_permissions()
     def perform_create(self, serializer):
-        usuario = serializer.save(empresa=self.request.user.empresa)
+        admin_creador = self.request.user
+        
+        # 1. Obtener la empresa y sucursal de manera robusta
+        empresa_admin = getattr(admin_creador, 'empresa', None)
+        sucursal_admin = getattr(admin_creador, 'sucursal', None)
+        
+        # Si el administrador no tiene empresa asignada directamente pero sí sucursal, la deducimos
+        if not empresa_admin and sucursal_admin:
+            empresa_admin = sucursal_admin.empresa
+
+        # 2. Capturar el nombre que mandó el frontend para concatenar el prefijo del Tenant
+        nombre_original = serializer.validated_data.get('nombre', '')
+        
+        if empresa_admin and not admin_creador.is_superuser:
+            # Extraemos la marca de la empresa (Ej: "Genex" o "Surtidor Octano")
+            prefijo_empresa = empresa_admin.razon_social
+            
+            # Formateamos el nombre de manera paramétrica si no contiene ya el prefijo
+            if prefijo_empresa.lower() not in nombre_original.lower():
+                nombre_final = f"{prefijo_empresa} - {nombre_original}"
+            else:
+                nombre_final = nombre_original
+                
+            # 3. Guardamos inyectando el Tenant completo (Empresa y Sucursal) del creador
+            usuario = serializer.save(
+                empresa=empresa_admin,
+                sucursal=sucursal_admin,
+                nombre=nombre_final
+            )
+        else:
+            # Fallback para el Super Admin global en pruebas locales
+            usuario = serializer.save()
+
+        # 4. Registro Mandatorio en Bitácora (Seguridad e Inmutabilidad)
         registrar_bitacora(
             self.request,
             accion='CREAR',
             modulo='Administración y Seguridad',
-            descripcion=f'Creó el usuario: {usuario.email}',
+            descripcion=f'Creó el usuario multitenant: {usuario.email} asignado a {usuario.nombre}',
         )
 
     def perform_update(self, serializer):

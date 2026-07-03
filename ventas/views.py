@@ -928,3 +928,85 @@ class ConfiguracionPuntosViewSet(viewsets.GenericViewSet):
             ),
         )
         return Response(serializer.data)
+
+
+class PuntosViewSet(viewsets.GenericViewSet):
+    """Endpoints dedicados al programa de puntos (sobre Cliente del POS, no Usuario).
+
+    Se expone bajo /api/puntos/ para evitar conflicto con usuarios.ClienteViewSet.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = ClienteSerializer
+
+    def _get_clientes_qs(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Cliente.objects.filter(activo=True)
+        if user.empresa:
+            return Cliente.objects.filter(
+                activo=True,
+                empresa_clientes__empresa=user.empresa,
+            ).distinct()
+        return Cliente.objects.none()
+
+    @action(detail=False, methods=['get'], url_path='ranking')
+    def ranking(self, request):
+        """GET /api/puntos/ranking/ — clientes de la empresa ordenados por saldo."""
+        qs = self._get_clientes_qs().order_by('-puntos_acumulados', 'nombre')
+        data = [
+            {
+                'id': c.id,
+                'nombre': c.nombre,
+                'nit': c.nit,
+                'telefono': c.telefono,
+                'puntos_acumulados': c.puntos_acumulados,
+            }
+            for c in qs
+        ]
+        return Response({'clientes': data})
+
+    @action(detail=False, methods=['get'], url_path=r'cliente/(?P<cliente_id>\d+)')
+    def cliente_detalle(self, request, cliente_id=None):
+        """GET /api/puntos/cliente/{id}/ — saldo + historial de movimientos."""
+        cliente = self._get_clientes_qs().filter(pk=cliente_id).first()
+        if not cliente:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
+        movs = cliente.movimientos_puntos.select_related('venta', 'created_by').all()
+        return Response({
+            'cliente_id': cliente.id,
+            'cliente_nombre': cliente.nombre,
+            'saldo': cliente.puntos_acumulados,
+            'movimientos': MovimientoPuntosSerializer(movs, many=True).data,
+        })
+
+    @action(detail=False, methods=['post'], url_path=r'cliente/(?P<cliente_id>\d+)/ajustar')
+    def ajustar(self, request, cliente_id=None):
+        """POST /api/puntos/cliente/{id}/ajustar/ — ajuste manual con motivo."""
+        cliente = self._get_clientes_qs().filter(pk=cliente_id).first()
+        if not cliente:
+            return Response({'error': 'Cliente no encontrado'}, status=404)
+
+        try:
+            delta = int(request.data.get('puntos'))
+        except (TypeError, ValueError):
+            return Response({'error': 'puntos debe ser un entero (positivo o negativo)'}, status=400)
+
+        motivo = (request.data.get('motivo') or '').strip()
+        if not motivo:
+            return Response({'error': 'Debes indicar un motivo'}, status=400)
+
+        try:
+            mov = puntos_service.ajustar_puntos(cliente, delta, motivo, request.user)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=400)
+
+        registrar_bitacora(
+            request,
+            accion='EDITAR',
+            modulo='Puntos',
+            descripcion=f'Ajuste manual de {delta} pts a {cliente.nombre}: {motivo}',
+        )
+        return Response({
+            'saldo': cliente.puntos_acumulados,
+            'movimiento': MovimientoPuntosSerializer(mov).data,
+        })

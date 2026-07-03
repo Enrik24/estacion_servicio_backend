@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ConsolidacionCajaViewSet, SucursalViewSet, IslaViewSet, LadoViewSet,
     TipoCombustibleViewSet, TurnoViewSet, ClienteViewSet, VentaViewSet, VehiculoViewSet,
-    ConfiguracionPuntosViewSet,
+    ConfiguracionPuntosViewSet, PuntosViewSet,
 )
 
 router = DefaultRouter()
@@ -31,6 +31,7 @@ router.register(r'consolidacion', ConsolidacionCajaViewSet, basename='consolidac
 
 # Programa de puntos
 router.register(r'configuracion-puntos', ConfiguracionPuntosViewSet, basename='configuracion-puntos')
+router.register(r'puntos', PuntosViewSet, basename='puntos')
 
 urlpatterns = [
     path('', include(router.urls)),

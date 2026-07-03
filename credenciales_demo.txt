@@ -1,0 +1,49 @@
+CREDENCIALES DE DEMO — Sistema Estacion de Servicio
+======================================================================
+Password universal: demo123
+
+Superadmin del sistema:
+  superadmin@surtidor.com  /  super123
+
+
+[GasBol S.A.]
+----------------------------------------------------------------------
+Rol            Nombre                      Email                                 Sucursal
+----------------------------------------------------------------------
+Administrador  Admin GasBol S.A.           admin@gasbol.bo                       —
+Gerente        Gerente Centro              gerente.gasbol.1@estacion.bo          GasBol Centro
+Operador       Operador 1 - Centro         op1.gasbol.1@estacion.bo              GasBol Centro
+Operador       Operador 2 - Centro         op2.gasbol.1@estacion.bo              GasBol Centro
+Operador       Operador 3 - Centro         op3.gasbol.1@estacion.bo              GasBol Centro
+Gerente        Gerente Sur                 gerente.gasbol.2@estacion.bo          GasBol Sur
+Operador       Operador 1 - Sur            op1.gasbol.2@estacion.bo              GasBol Sur
+Operador       Operador 2 - Sur            op2.gasbol.2@estacion.bo              GasBol Sur
+Operador       Operador 3 - Sur            op3.gasbol.2@estacion.bo              GasBol Sur
+
+[PetroCruz Ltda.]
+----------------------------------------------------------------------
+Rol            Nombre                      Email                                 Sucursal
+----------------------------------------------------------------------
+Administrador  Admin PetroCruz Ltda.       admin@petrocruz.bo                    —
+Gerente        Gerente El Alto             gerente.petrocruz.1@estacion.bo       PetroCruz El Alto
+Operador       Operador 1 - El Alto        op1.petrocruz.1@estacion.bo           PetroCruz El Alto
+Operador       Operador 2 - El Alto        op2.petrocruz.1@estacion.bo           PetroCruz El Alto
+Operador       Operador 3 - El Alto        op3.petrocruz.1@estacion.bo           PetroCruz El Alto
+Gerente        Gerente Zona Sur            gerente.petrocruz.2@estacion.bo       PetroCruz Zona Sur
+Operador       Operador 1 - Zona Sur       op1.petrocruz.2@estacion.bo           PetroCruz Zona Sur
+Operador       Operador 2 - Zona Sur       op2.petrocruz.2@estacion.bo           PetroCruz Zona Sur
+Operador       Operador 3 - Zona Sur       op3.petrocruz.2@estacion.bo           PetroCruz Zona Sur
+
+[YPFB Andina Norte]
+----------------------------------------------------------------------
+Rol            Nombre                      Email                                 Sucursal
+----------------------------------------------------------------------
+Administrador  Admin YPFB Andina Norte     admin@ypfbnorte.bo                    —
+Gerente        Gerente Cala Cala           gerente.ypfbnorte.1@estacion.bo       YPFB Cala Cala
+Operador       Operador 1 - Cala Cala      op1.ypfbnorte.1@estacion.bo           YPFB Cala Cala
+Operador       Operador 2 - Cala Cala      op2.ypfbnorte.1@estacion.bo           YPFB Cala Cala
+Operador       Operador 3 - Cala Cala      op3.ypfbnorte.1@estacion.bo           YPFB Cala Cala
+Gerente        Gerente Quillacollo         gerente.ypfbnorte.2@estacion.bo       YPFB Quillacollo
+Operador       Operador 1 - Quillacollo    op1.ypfbnorte.2@estacion.bo           YPFB Quillacollo
+Operador       Operador 2 - Quillacollo    op2.ypfbnorte.2@estacion.bo           YPFB Quillacollo
+Operador       Operador 3 - Quillacollo    op3.ypfbnorte.2@estacion.bo           YPFB Quillacollo

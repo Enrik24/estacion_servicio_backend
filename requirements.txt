@@ -9,3 +9,4 @@ gunicorn==21.2.0
 requests==2.32.3
 django-crontab==0.7.1
 Pillow==10.4.0
+whitenoise==6.7.0

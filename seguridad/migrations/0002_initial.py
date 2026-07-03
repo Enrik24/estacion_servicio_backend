@@ -1,21 +1,18 @@
-import django.db.models.deletion
 from django.conf import settings
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
+    """No-op: el campo 'usuario' ya se crea en 0001_initial.
 
-    initial = True
+    Anteriormente esta migracion intentaba AddField('bitacora', 'usuario'),
+    lo que causaba 'column usuario_id already exists' en despliegues limpios.
+    Se deja vacia para no romper el historial de proyectos que ya la aplicaron.
+    """
 
     dependencies = [
         ('seguridad', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
-    operations = [
-        migrations.AddField(
-            model_name='bitacora',
-            name='usuario',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL),
-        ),
-    ]
+    operations = []
